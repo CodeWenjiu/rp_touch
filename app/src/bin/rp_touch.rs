@@ -1,9 +1,12 @@
 #![no_std]
 #![no_main]
 
-use defmt::{error, info};
+use core::fmt::Write;
+
 use embassy_executor::Spawner;
-use {defmt_rtt as _, panic_probe as _};
+use embassy_futures::select::{Either, select};
+use embassy_time::{Duration, Timer};
+use panic_probe as _;
 
 // Program metadata for `picotool info`.
 // This isn't needed, but it's recommended to have these minimal entries.
@@ -21,23 +24,34 @@ pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
+    let imu = qmi8658_driver::Qmi8658::new_default(p.I2C1, p.PIN_6, p.PIN_7, p.PIN_8).unwrap();
+    spawner.spawn(qmi8658_driver::imu_capture_task(imu).unwrap());
+
     let mut class = usb_serial::init(spawner, p.USB, usb_serial::UsbSerialConfig::default());
 
     class.wait_connection().await;
-    info!("PC connected via USB CDC!");
 
     let mut buf = [0u8; 64];
-    loop {
-        let hello = b"Hello from Pico 2!\r\n";
-        let _ = class.write_packet(hello).await;
 
-        match class.read_packet(&mut buf).await {
-            Ok(n) => {
-                info!("Received {} bytes: {:?}", n, &buf[..n]);
-                let _ = class.write_packet(&buf[..n]).await;
+    loop {
+        match select(
+            class.read_packet(&mut buf),
+            Timer::after(Duration::from_millis(1000)),
+        )
+        .await
+        {
+            Either::First(Ok(n)) => {
+                if n > 0 {
+                    let _ = class.write_packet(&buf[..n]).await;
+                }
             }
-            Err(e) => {
-                error!("USB read error: {:?}", e);
+            Either::First(Err(_)) => {}
+            Either::Second(()) => {
+                if let Some(frame) = qmi8658_driver::read_latest_frame() {
+                    let mut line = heapless::String::<96>::new();
+                    let _ = write!(line, "{}\r\n", frame);
+                    let _ = class.write_packet(line.as_bytes()).await;
+                }
             }
         }
     }

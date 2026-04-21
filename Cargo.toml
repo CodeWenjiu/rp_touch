@@ -1,13 +1,18 @@
 [workspace]
-members = ["app", "crates/usb_serial"]
+members = ["app", "crates/usb_serial", "crates/qmi8658_driver"]
 default-members = ["app"]
 resolver = "2"
 
 [workspace.dependencies]
-defmt = "1.0.1"
-embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
-embassy-usb = { version = "0.6.0", features = ["defmt"] }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-futures = "0.1.2"
+embassy-rp = { version = "0.10.0", features = ["unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
+embassy-sync = "0.8.0"
+embassy-time = "0.5.1"
+embassy-usb = { version = "0.6.0" }
+cortex-m-rt = "0.7.5"
+heapless = "0.9"
+panic-probe = "1.0.0"
 static_cell = "2.1"
 
 [profile.release]

@@ -1,6 +1,5 @@
 #![no_std]
 
-use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_rp::{
     bind_interrupts,
@@ -78,6 +77,7 @@ pub fn init(spawner: Spawner, usb: Peri<'static, USB>, config: UsbSerialConfig) 
     let class = CdcAcmClass::new(&mut builder, state, config.cdc_max_packet_size);
 
     let usb = builder.build();
-    spawner.spawn(unwrap!(usb_task(usb)));
+    let usb_task = usb_task(usb).unwrap();
+    spawner.spawn(usb_task);
     class
 }
