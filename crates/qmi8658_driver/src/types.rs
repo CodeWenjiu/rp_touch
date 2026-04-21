@@ -207,7 +207,7 @@ pub struct FifoConfig {
 impl Default for FifoConfig {
     fn default() -> Self {
         Self {
-            watermark_odr_samples: 2,
+            watermark_odr_samples: 8,
             size: FifoSize::Samples32,
             mode: FifoMode::Stream,
         }

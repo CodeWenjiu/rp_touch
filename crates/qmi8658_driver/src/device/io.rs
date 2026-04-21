@@ -30,9 +30,9 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub(super) async fn read_fifo_bytes(&mut self, out: &mut [u8]) -> Result<(), Error> {
-        for byte in out.iter_mut() {
-            *byte = self.read_reg(QMI8658_REG_FIFO_DATA).await?;
-        }
+        self.i2c
+            .write_read_async(self.address, [QMI8658_REG_FIFO_DATA].iter().copied(), out)
+            .await?;
         Ok(())
     }
 
@@ -49,6 +49,7 @@ impl<'d> Qmi8658<'d> {
             tries += 1;
         }
 
+        let _ = self.write_reg(QMI8658_REG_CTRL9, CTRL9_CMD_ACK).await;
         Err(Error::Ctrl9Timeout)
     }
 }

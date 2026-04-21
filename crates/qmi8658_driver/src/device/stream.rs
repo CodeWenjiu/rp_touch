@@ -21,9 +21,7 @@ impl<'d> Qmi8658<'d> {
     ) -> Result<usize, Error> {
         self.ctrl9_command(CTRL9_CMD_REQ_FIFO).await?;
 
-        let sample_words_lsb = self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
-        let fifo_status = self.read_reg(QMI8658_REG_FIFO_STATUS).await?;
-        let sample_words = (((fifo_status & 0b11) as u16) << 8) | sample_words_lsb as u16;
+        let sample_words = self.fifo_word_count().await?;
         let total_bytes = sample_words as usize * 2;
         let total_samples = total_bytes / 12;
         let trailing_bytes = total_bytes % 12;
@@ -56,14 +54,23 @@ impl<'d> Qmi8658<'d> {
         state: &mut Int1FifoStreamState,
         fifo_batch: &mut [ImuRawSample],
     ) -> Result<usize, ImuReport> {
-        // Some boards/sensor configs can keep INT1 high until FIFO is serviced.
-        // If INT1 is already high, consume FIFO immediately instead of waiting
-        // for a new rising edge that may never come.
-        if !self.int1_is_high() {
-            self.wait_int1_rising_edge().await;
+        let pending_words = match self.fifo_word_count().await {
+            Ok(v) => v,
+            Err(_) => {
+                state.read_fail_count = state.read_fail_count.saturating_add(1);
+                return Err(ImuReport::ReadError(state.read_fail_count));
+            }
+        };
+
+        if pending_words == 0 {
+            self.wait_int1_any_edge().await;
         }
+
         match self.read_fifo_samples_into(fifo_batch).await {
-            Ok(n) if n > 0 => Ok(n),
+            Ok(n) if n > 0 => {
+                state.read_fail_count = 0;
+                Ok(n)
+            }
             Ok(_) | Err(_) => {
                 state.read_fail_count = state.read_fail_count.saturating_add(1);
                 Err(ImuReport::ReadError(state.read_fail_count))
@@ -84,5 +91,11 @@ impl<'d> Qmi8658<'d> {
                 i16::from_le_bytes([buf[10], buf[11]]),
             ],
         }
+    }
+
+    async fn fifo_word_count(&mut self) -> Result<u16, Error> {
+        let sample_words_lsb = self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
+        let fifo_status = self.read_reg(QMI8658_REG_FIFO_STATUS).await?;
+        Ok((((fifo_status & 0b11) as u16) << 8) | sample_words_lsb as u16)
     }
 }

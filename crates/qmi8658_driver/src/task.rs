@@ -6,15 +6,18 @@ use crate::{
     types::{CaptureState, FifoConfig, ImuRawSample, ImuReport, Int1FifoStreamState},
 };
 
+fn report_to_capture_state(report: ImuReport) -> CaptureState {
+    match report {
+        ImuReport::InvalidChipId(chip_id) => CaptureState::InvalidChipId(chip_id),
+        ImuReport::InitError => CaptureState::InitFailed,
+        _ => CaptureState::FifoConfigFailed,
+    }
+}
+
 #[embassy_executor::task]
 pub async fn imu_capture_task(mut imu: Qmi8658<'static>) -> ! {
     if let Err(report) = imu.setup_int1_fifo_stream(FifoConfig::default()).await {
-        let state = match report {
-            ImuReport::InvalidChipId(chip_id) => CaptureState::InvalidChipId(chip_id),
-            ImuReport::InitError => CaptureState::InitFailed,
-            _ => CaptureState::FifoConfigFailed,
-        };
-        set_state(state);
+        set_state(report_to_capture_state(report));
 
         loop {
             Timer::after(Duration::from_secs(1)).await;
@@ -37,8 +40,11 @@ pub async fn imu_capture_task(mut imu: Qmi8658<'static>) -> ! {
                 for sample in fifo_batch[..n].iter().copied() {
                     push_sample(sample);
                 }
+                set_read_fail_count(0);
             }
-            Err(ImuReport::ReadError(count)) => set_read_fail_count(count),
+            Err(ImuReport::ReadError(count)) => {
+                set_read_fail_count(count);
+            }
             Err(_) => {}
         }
     }

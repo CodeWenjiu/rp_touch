@@ -129,6 +129,10 @@ impl<'d> Qmi8658<'d> {
         self.int1.wait_for_rising_edge().await;
     }
 
+    pub async fn wait_int1_any_edge(&mut self) {
+        self.int1.wait_for_any_edge().await;
+    }
+
     pub fn int1_is_high(&self) -> bool {
         self.int1.is_high()
     }
