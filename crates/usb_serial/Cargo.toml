@@ -1,0 +1,11 @@
+[package]
+name = "usb_serial"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+defmt = { workspace = true }
+embassy-executor = { workspace = true }
+embassy-rp = { workspace = true }
+embassy-usb = { workspace = true }
+static_cell = { workspace = true }

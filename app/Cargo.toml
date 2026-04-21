@@ -1,0 +1,18 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+defmt = { workspace = true }
+embassy-executor = { workspace = true }
+embassy-rp = { workspace = true }
+cortex-m-rt = "0.7.0"
+defmt-rtt = "1.0.0"
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+usb_serial = { path = "../crates/usb_serial" }
+
+[[bin]]
+name = "rp_touch"
+path = "src/bin/rp_touch.rs"
