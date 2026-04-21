@@ -9,3 +9,4 @@ embassy-rp = { workspace = true }
 embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
 heapless = { workspace = true }
+micromath = { workspace = true }

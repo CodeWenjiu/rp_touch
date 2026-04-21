@@ -1,7 +1,7 @@
 use crate::{
     regs::{
-        CTRL9_CMD_REQ_FIFO, FIFO_CTRL_RD_MODE, QMI8658_REG_AX_L, QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_SMPL_CNT,
-        QMI8658_REG_FIFO_STATUS,
+        CTRL9_CMD_REQ_FIFO, FIFO_CTRL_RD_MODE, QMI8658_REG_AX_L, QMI8658_REG_FIFO_CTRL,
+        QMI8658_REG_FIFO_SMPL_CNT, QMI8658_REG_FIFO_STATUS,
     },
     types::{Error, ImuRawSample, ImuReport, Int1FifoStreamState},
 };
@@ -15,7 +15,10 @@ impl<'d> Qmi8658<'d> {
         Ok(Self::parse_sample(&buf))
     }
 
-    pub async fn read_fifo_samples_into(&mut self, out: &mut [ImuRawSample]) -> Result<usize, Error> {
+    pub async fn read_fifo_samples_into(
+        &mut self,
+        out: &mut [ImuRawSample],
+    ) -> Result<usize, Error> {
         self.ctrl9_command(CTRL9_CMD_REQ_FIFO).await?;
 
         let sample_words_lsb = self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
@@ -40,8 +43,11 @@ impl<'d> Qmi8658<'d> {
             self.read_fifo_bytes(&mut discard[..trailing_bytes]).await?;
         }
 
-        self.write_reg(QMI8658_REG_FIFO_CTRL, self.fifo_ctrl_cfg & !FIFO_CTRL_RD_MODE)
-            .await?;
+        self.write_reg(
+            QMI8658_REG_FIFO_CTRL,
+            self.fifo_ctrl_cfg & !FIFO_CTRL_RD_MODE,
+        )
+        .await?;
         Ok(written)
     }
 

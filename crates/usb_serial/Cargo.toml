@@ -7,4 +7,5 @@ edition = "2024"
 embassy-executor = { workspace = true }
 embassy-rp = { workspace = true }
 embassy-usb = { workspace = true }
+heapless = { workspace = true }
 static_cell = { workspace = true }

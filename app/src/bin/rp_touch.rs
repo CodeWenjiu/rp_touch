@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::fmt::Write;
-
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_time::{Duration, Timer};
@@ -36,7 +34,7 @@ async fn main(spawner: Spawner) {
     loop {
         match select(
             class.read_packet(&mut buf),
-            Timer::after(Duration::from_millis(1000)),
+            Timer::after(Duration::from_millis(100)),
         )
         .await
         {
@@ -48,9 +46,9 @@ async fn main(spawner: Spawner) {
             Either::First(Err(_)) => {}
             Either::Second(()) => {
                 if let Some(frame) = qmi8658_driver::read_latest_frame() {
-                    let mut line = heapless::String::<96>::new();
-                    let _ = write!(line, "{}\r\n", frame);
-                    let _ = class.write_packet(line.as_bytes()).await;
+                    let tilt = frame.sample.tilt_deg_from_accel_8g();
+                    let mut writer = usb_serial::UsbTextWriter::<96>::new(&mut class);
+                    let _ = usb_serial::usb_println!(writer, "{}", tilt);
                 }
             }
         }

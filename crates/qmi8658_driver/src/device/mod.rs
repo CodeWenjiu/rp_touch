@@ -8,11 +8,12 @@ use embassy_time::{Duration, Timer};
 
 use crate::{
     regs::{
-        CTRL1_ADDR_AI, CTRL1_BASE, CTRL1_FIFO_INT_SEL, CTRL1_INT1_EN, CTRL2_DEFAULT_ACCEL_8G_1000HZ,
-        CTRL3_DEFAULT_GYRO_512DPS_1000HZ, CTRL7_ACCEL_ENABLE, CTRL7_GYRO_ENABLE,
-        CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT, CTRL9_CMD_RST_FIFO, QMI8658_CHIP_ID, QMI8658_REG_CTRL1,
-        QMI8658_REG_CTRL2, QMI8658_REG_CTRL3, QMI8658_REG_CTRL7, QMI8658_REG_CTRL8, QMI8658_REG_FIFO_CTRL,
-        QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_WHO_AM_I,
+        CTRL1_ADDR_AI, CTRL1_BASE, CTRL1_FIFO_INT_SEL, CTRL1_INT1_EN,
+        CTRL2_DEFAULT_ACCEL_8G_1000HZ, CTRL3_DEFAULT_GYRO_512DPS_1000HZ, CTRL7_ACCEL_ENABLE,
+        CTRL7_GYRO_ENABLE, CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT, CTRL9_CMD_RST_FIFO,
+        QMI8658_CHIP_ID, QMI8658_REG_CTRL1, QMI8658_REG_CTRL2, QMI8658_REG_CTRL3,
+        QMI8658_REG_CTRL7, QMI8658_REG_CTRL8, QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_WTM_TH,
+        QMI8658_REG_WHO_AM_I,
     },
     types::{Error, FifoConfig, ImuReport, Qmi8658Config},
 };
@@ -107,7 +108,8 @@ impl<'d> Qmi8658<'d> {
 
         self.fifo_ctrl_cfg = ((config.size.bits() << crate::regs::FIFO_CTRL_SIZE_SHIFT) & 0b1100)
             | (config.mode.bits() & crate::regs::FIFO_CTRL_MODE_MASK);
-        self.write_reg(QMI8658_REG_FIFO_CTRL, self.fifo_ctrl_cfg).await?;
+        self.write_reg(QMI8658_REG_FIFO_CTRL, self.fifo_ctrl_cfg)
+            .await?;
 
         self.ctrl9_command(CTRL9_CMD_RST_FIFO).await?;
         self.enable_accel_gyro().await
