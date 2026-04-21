@@ -11,6 +11,7 @@ embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
 embassy-usb = { version = "0.6.0" }
 cortex-m-rt = "0.7.5"
+embedded-alloc = "0.6.0"
 heapless = "0.9"
 micromath = "2.1.0"
 panic-probe = "1.0.0"

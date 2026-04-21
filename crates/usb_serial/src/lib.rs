@@ -1,5 +1,8 @@
 #![no_std]
 
+extern crate alloc;
+
+use alloc::string::String;
 use core::fmt;
 
 use embassy_executor::Spawner;
@@ -13,11 +16,11 @@ use embassy_usb::{
     class::cdc_acm::{CdcAcmClass, State},
     driver::EndpointError,
 };
-use heapless::String;
 use static_cell::StaticCell;
 
 pub type UsbSerialClass = CdcAcmClass<'static, Driver<'static, USB>>;
 const DEFAULT_WRITE_PACKET_SIZE: usize = 64;
+const DEFAULT_FORMAT_BUF_SIZE: usize = 128;
 
 pub struct UsbSerialConfig {
     pub vendor_id: u16,
@@ -89,27 +92,38 @@ pub fn init(spawner: Spawner, usb: Peri<'static, USB>, config: UsbSerialConfig) 
 #[derive(Debug)]
 pub enum UsbSerialWriteError {
     Endpoint(EndpointError),
-    BufferOverflow,
+    AllocFailed,
 }
 
-pub struct UsbTextWriter<'a, const BUF: usize = 128> {
+pub struct UsbTextWriter<'a> {
     class: &'a mut UsbSerialClass,
     packet_size: usize,
+    fmt_buf: String,
 }
 
-impl<'a, const BUF: usize> UsbTextWriter<'a, BUF> {
+impl<'a> UsbTextWriter<'a> {
     pub fn new(class: &'a mut UsbSerialClass) -> Self {
-        Self {
-            class,
-            packet_size: DEFAULT_WRITE_PACKET_SIZE,
-        }
+        Self::with_packet_size(class, DEFAULT_WRITE_PACKET_SIZE)
     }
 
     pub fn with_packet_size(class: &'a mut UsbSerialClass, packet_size: usize) -> Self {
         Self {
             class,
             packet_size: packet_size.max(1),
+            fmt_buf: String::new(),
         }
+    }
+
+    pub async fn wait_connection(&mut self) {
+        self.class.wait_connection().await;
+    }
+
+    pub async fn read_packet(&mut self, data: &mut [u8]) -> Result<usize, EndpointError> {
+        self.class.read_packet(data).await
+    }
+
+    pub async fn write_packet(&mut self, data: &[u8]) -> Result<(), EndpointError> {
+        self.class.write_packet(data).await
     }
 
     pub async fn write_str(&mut self, text: &str) -> Result<(), UsbSerialWriteError> {
@@ -117,20 +131,33 @@ impl<'a, const BUF: usize> UsbTextWriter<'a, BUF> {
     }
 
     pub async fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> Result<(), UsbSerialWriteError> {
-        let mut text = String::<BUF>::new();
-        fmt::write(&mut text, args).map_err(|_| UsbSerialWriteError::BufferOverflow)?;
-        self.write_str(text.as_str()).await
+        let mut fmt_buf = core::mem::take(&mut self.fmt_buf);
+        reserve_at_least(&mut fmt_buf, DEFAULT_FORMAT_BUF_SIZE)
+            .map_err(|_| UsbSerialWriteError::AllocFailed)?;
+        fmt_buf.clear();
+        let mut sink = FallibleFmtSink(&mut fmt_buf);
+        fmt::write(&mut sink, args).map_err(|_| UsbSerialWriteError::AllocFailed)?;
+        let res = self.write_bytes(fmt_buf.as_bytes()).await;
+        self.fmt_buf = fmt_buf;
+        res
     }
 
     pub async fn writeln_fmt(
         &mut self,
         args: fmt::Arguments<'_>,
     ) -> Result<(), UsbSerialWriteError> {
-        let mut text = String::<BUF>::new();
-        fmt::write(&mut text, args).map_err(|_| UsbSerialWriteError::BufferOverflow)?;
-        text.push_str("\r\n")
-            .map_err(|_| UsbSerialWriteError::BufferOverflow)?;
-        self.write_str(text.as_str()).await
+        let mut fmt_buf = core::mem::take(&mut self.fmt_buf);
+        reserve_at_least(&mut fmt_buf, DEFAULT_FORMAT_BUF_SIZE)
+            .map_err(|_| UsbSerialWriteError::AllocFailed)?;
+        fmt_buf.clear();
+        {
+            let mut sink = FallibleFmtSink(&mut fmt_buf);
+            fmt::write(&mut sink, args).map_err(|_| UsbSerialWriteError::AllocFailed)?;
+        }
+        push_try_str(&mut fmt_buf, "\r\n").map_err(|_| UsbSerialWriteError::AllocFailed)?;
+        let res = self.write_bytes(fmt_buf.as_bytes()).await;
+        self.fmt_buf = fmt_buf;
+        res
     }
 
     async fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), UsbSerialWriteError> {
@@ -142,6 +169,28 @@ impl<'a, const BUF: usize> UsbTextWriter<'a, BUF> {
         }
         Ok(())
     }
+}
+
+struct FallibleFmtSink<'a>(&'a mut String);
+
+impl fmt::Write for FallibleFmtSink<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        push_try_str(self.0, s).map_err(|_| fmt::Error)
+    }
+}
+
+fn push_try_str(dst: &mut String, s: &str) -> Result<(), ()> {
+    dst.try_reserve(s.len()).map_err(|_| ())?;
+    dst.push_str(s);
+    Ok(())
+}
+
+fn reserve_at_least(dst: &mut String, min_capacity: usize) -> Result<(), ()> {
+    if dst.capacity() < min_capacity {
+        dst.try_reserve(min_capacity - dst.capacity())
+            .map_err(|_| ())?;
+    }
+    Ok(())
 }
 
 #[macro_export]
