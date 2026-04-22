@@ -46,6 +46,10 @@ bind_interrupts!(struct I2cIrqs {
     I2C1_IRQ => i2c::InterruptHandler<peripherals::I2C1>;
 });
 
+fn touch_sample_to_xy(sample: ft3168_driver::TouchSample) -> Option<(u16, u16)> {
+    sample.map(|p| (p.x, p.y))
+}
+
 #[embassy_executor::task]
 async fn sensor_watch_task(
     imu_pipeline: &'static qmi8658_driver::ImuPipeline,
@@ -187,7 +191,6 @@ async fn main(spawner: Spawner) {
     if ui_enabled {
         if let (Some(ui_ref), Some(backend_ref)) = (ui.as_ref(), backend.as_mut()) {
             ui_ref.set_tilt_ratio(0.5);
-            ui_ref.set_touch_active(false);
             backend_ref.request_redraw();
             let _ = backend_ref.render_if_needed(&mut display);
         }
@@ -199,7 +202,6 @@ async fn main(spawner: Spawner) {
     let mut imu_ui_rx = IMU_WATCH.receiver().unwrap();
     let mut touch_ui_rx = TOUCH_WATCH.receiver().unwrap();
     let mut latest_imu = imu_ui_rx.try_get().unwrap_or_default();
-    let mut latest_touch = touch_ui_rx.try_get().unwrap_or_default();
     let mut ui_dirty = true;
     let mut ui_data_ticks = 0u32;
 
@@ -209,8 +211,9 @@ async fn main(spawner: Spawner) {
             ui_dirty = true;
         }
         while let Some(frame) = touch_ui_rx.try_changed() {
-            latest_touch = frame;
-            ui_dirty = true;
+            if let Some(backend_ref) = backend.as_mut() {
+                let _ = backend_ref.inject_touch_sample(touch_sample_to_xy(frame.sample));
+            }
         }
 
         ui_data_ticks = ui_data_ticks.saturating_add(UI_RENDER_PERIOD_MS as u32);
@@ -225,7 +228,6 @@ async fn main(spawner: Spawner) {
                 let pitch = tilt.pitch_deg;
                 let ratio = ((pitch + 90.0) / 180.0).clamp(0.0, 1.0);
                 ui_ref.set_tilt_ratio(ratio);
-                ui_ref.set_touch_active(latest_touch.sample.is_some());
             }
             if let Some(backend_ref) = backend.as_ref() {
                 backend_ref.request_redraw();

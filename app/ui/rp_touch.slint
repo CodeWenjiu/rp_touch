@@ -3,7 +3,6 @@ export component AppUi inherits Window {
     height: 456px;
 
     in-out property <float> tilt_ratio: 0.5;
-    in-out property <bool> touch_active: false;
 
     Rectangle {
         background: #0055ff;
@@ -32,13 +31,20 @@ export component AppUi inherits Window {
             background: #00ff66;
         }
 
-        Rectangle {
+        touch_probe := TouchArea {
             x: (parent.width / 2) - 36px;
             y: 150px;
             width: 72px;
             height: 72px;
+        }
+
+        Rectangle {
+            x: touch_probe.x;
+            y: touch_probe.y;
+            width: touch_probe.width;
+            height: touch_probe.height;
             border-radius: 36px;
-            background: root.touch_active ? #ff2255 : #7f8c8d;
+            background: touch_probe.pressed ? #ff2255 : #7f8c8d;
         }
 
         Rectangle {
