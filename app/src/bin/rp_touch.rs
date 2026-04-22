@@ -67,8 +67,8 @@ async fn main(spawner: Spawner) {
     let mut imu_reader = imu_pipeline.reader();
 
     let touch_pipeline = TOUCH_PIPELINE_CELL.init(ft3168_driver::TouchPipeline::new());
-    let touch = ft3168_driver::Ft3168::new_shared(i2c_bus, ft3168_driver::Ft3168Config::default())
-        .unwrap();
+    let touch =
+        ft3168_driver::Ft3168::new_shared(i2c_bus, ft3168_driver::Ft3168Config::default()).unwrap();
     spawner.spawn(ft3168_driver::touch_capture_task(touch, touch_pipeline).unwrap());
     let mut touch_reader = touch_pipeline.reader();
 
@@ -96,12 +96,8 @@ async fn main(spawner: Spawner) {
                 let frame = imu_reader.read_latest_frame();
                 let tilt = frame.sample.tilt_deg_from_accel_8g();
                 let touch_frame = touch_reader.read_latest_frame();
-                let _ = usb_serial::usb_println!(
-                    serial,
-                    "{},touch={}",
-                    tilt,
-                    touch_frame.sample.touch_count
-                );
+                let _ =
+                    usb_serial::usb_println!(serial, "{}, touch: {:?}", tilt, touch_frame.sample);
             }
         }
     }

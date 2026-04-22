@@ -14,6 +14,5 @@ pub use regs::{
 pub use storage::{TOUCH_FRAME_QUEUE_CAPACITY, TouchPipeline, TouchReader};
 pub use task::touch_capture_task;
 pub use types::{
-    CaptureState, CaptureStats, Error, Ft3168Config, TouchEvent, TouchFrame, TouchPoint,
-    TouchSample,
+    CaptureState, CaptureStats, Error, Ft3168Config, TouchFrame, TouchPoint, TouchSample,
 };
