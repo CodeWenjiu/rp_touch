@@ -1,25 +1,28 @@
 #![no_std]
 #![no_main]
 
+#[path = "rp_touch/shared.rs"]
+mod shared;
 #[path = "rp_touch/slint_ui.rs"]
 mod slint_ui;
+#[path = "rp_touch/tasks/mod.rs"]
+mod tasks;
 
-use embassy_executor::Spawner;
-use embassy_futures::select::{Either, select};
+use core::ptr::addr_of_mut;
+
+use embassy_executor::{Executor, Spawner};
 use embassy_rp::{
     bind_interrupts,
     i2c::{self, Async, I2c},
+    multicore::Stack,
     peripherals,
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, watch::Watch};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 use panic_probe as _;
 use static_cell::StaticCell;
 
-const IMU_REPORT_PERIOD_MS: u64 = 500;
-const SENSOR_WATCH_PERIOD_MS: u64 = 5;
-const UI_RENDER_PERIOD_MS: u64 = 33;
-const UI_DATA_REFRESH_MS: u64 = 33;
+const CORE1_STACK_SIZE: usize = 16 * 1024;
 
 // Program metadata for `picotool info`.
 #[unsafe(link_section = ".bi_entries")]
@@ -33,121 +36,36 @@ pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
     embassy_rp::binary_info::rp_program_build_attribute!(),
 ];
 
-static mut DISPLAY_FRAMEBUFFER: co5300_driver::FrameBuffer = co5300_driver::FrameBuffer::new();
+static mut CORE1_STACK: Stack<CORE1_STACK_SIZE> = Stack::new();
+
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 static IMU_PIPELINE_CELL: StaticCell<qmi8658_driver::ImuPipeline> = StaticCell::new();
 static TOUCH_PIPELINE_CELL: StaticCell<ft3168_driver::TouchPipeline> = StaticCell::new();
 static I2C1_BUS_CELL: StaticCell<
     Mutex<CriticalSectionRawMutex, I2c<'static, peripherals::I2C1, Async>>,
 > = StaticCell::new();
-static IMU_WATCH: Watch<CriticalSectionRawMutex, qmi8658_driver::ImuFrame, 4> = Watch::new();
-static TOUCH_WATCH: Watch<CriticalSectionRawMutex, ft3168_driver::TouchFrame, 4> = Watch::new();
 
 bind_interrupts!(struct I2cIrqs {
     I2C1_IRQ => i2c::InterruptHandler<peripherals::I2C1>;
 });
-
-fn touch_sample_to_xy(sample: ft3168_driver::TouchSample) -> Option<(u16, u16)> {
-    sample.map(|p| (p.x, p.y))
-}
-
-#[embassy_executor::task]
-async fn sensor_watch_task(
-    imu_pipeline: &'static qmi8658_driver::ImuPipeline,
-    touch_pipeline: &'static ft3168_driver::TouchPipeline,
-) -> ! {
-    let mut imu_reader = imu_pipeline.reader();
-    let mut touch_reader = touch_pipeline.reader();
-
-    let imu_sender = IMU_WATCH.sender();
-    let touch_sender = TOUCH_WATCH.sender();
-
-    let mut last_imu_seq = 0u32;
-    let mut last_touch_seq = 0u32;
-
-    loop {
-        let imu_frame = imu_reader.read_latest_frame();
-        if imu_frame.seq != 0 && imu_frame.seq != last_imu_seq {
-            imu_sender.send(imu_frame);
-            last_imu_seq = imu_frame.seq;
-        }
-
-        let touch_frame = touch_reader.read_latest_frame();
-        if touch_frame.seq != 0 && touch_frame.seq != last_touch_seq {
-            touch_sender.send(touch_frame);
-            last_touch_seq = touch_frame.seq;
-        }
-
-        Timer::after(Duration::from_millis(SENSOR_WATCH_PERIOD_MS)).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn usb_telemetry_task(
-    mut class: usb_serial::UsbSerialClass,
-    imu_pipeline: &'static qmi8658_driver::ImuPipeline,
-    touch_pipeline: &'static ft3168_driver::TouchPipeline,
-) -> ! {
-    let mut serial = usb_serial::UsbTextWriter::new(&mut class);
-    serial.wait_connection().await;
-    let _ = usb_serial::usb_println!(serial, "BOOT,display_ready");
-
-    let mut imu_receiver = IMU_WATCH.receiver().unwrap();
-    let mut touch_receiver = TOUCH_WATCH.receiver().unwrap();
-
-    let mut latest_imu = imu_receiver.try_get().unwrap_or_default();
-    let mut latest_touch = touch_receiver.try_get().unwrap_or_default();
-    let mut buf = [0u8; 64];
-
-    loop {
-        match select(
-            serial.read_packet(&mut buf),
-            Timer::after(Duration::from_millis(IMU_REPORT_PERIOD_MS)),
-        )
-        .await
-        {
-            Either::First(Ok(n)) => {
-                if n > 0 {
-                    let _ = serial.write_packet(&buf[..n]).await;
-                }
-            }
-            Either::First(Err(_)) => {}
-            Either::Second(()) => {
-                while let Some(frame) = imu_receiver.try_changed() {
-                    latest_imu = frame;
-                }
-                while let Some(frame) = touch_receiver.try_changed() {
-                    latest_touch = frame;
-                }
-
-                let tilt = latest_imu.sample.tilt_deg_from_accel_8g();
-                let imu_stats = imu_pipeline.capture_stats();
-                let touch_stats = touch_pipeline.capture_stats();
-
-                let _ = usb_serial::usb_println!(
-                    serial,
-                    "{},touch={:?},imu_state={:?},imu_seq={},imu_fail={},imu_drop={},touch_state={:?},touch_seq={},touch_fail={},touch_drop={},touch_chip=0x{:02X}",
-                    tilt,
-                    latest_touch.sample,
-                    imu_stats.state,
-                    imu_stats.latest_seq,
-                    imu_stats.read_fail_count,
-                    imu_stats.dropped_samples,
-                    touch_stats.state,
-                    touch_stats.latest_seq,
-                    touch_stats.read_fail_count,
-                    touch_stats.dropped_frames,
-                    touch_stats.chip_id
-                );
-            }
-        }
-    }
-}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     board_alloc::init();
 
     let p = embassy_rp::init(Default::default());
+
+    // Core1: UI state update + Slint render + display DMA.
+    embassy_rp::multicore::spawn_core1(
+        p.CORE1,
+        unsafe { &mut *addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| {
+                spawner.spawn(tasks::ui_render::ui_render_task().unwrap());
+            });
+        },
+    );
 
     let mut i2c_cfg = i2c::Config::default();
     i2c_cfg.frequency = 400_000;
@@ -170,77 +88,15 @@ async fn main(spawner: Spawner) {
         ft3168_driver::Ft3168::new_shared(i2c_bus, ft3168_driver::Ft3168Config::default()).unwrap();
     spawner.spawn(ft3168_driver::touch_capture_task(touch, touch_pipeline).unwrap());
 
-    spawner.spawn(sensor_watch_task(imu_pipeline, touch_pipeline).unwrap());
+    // Core0: sensor capture fan-out + USB telemetry.
+    spawner.spawn(tasks::sensor_watch::sensor_watch_task(imu_pipeline, touch_pipeline).unwrap());
 
     let class = usb_serial::init(spawner, p.USB, usb_serial::UsbSerialConfig::default());
-    spawner.spawn(usb_telemetry_task(class, imu_pipeline, touch_pipeline).unwrap());
-
-    let mut display = co5300_driver::Co5300::new_default();
-    display.init_default().await;
-    let framebuffer = unsafe { &mut *core::ptr::addr_of_mut!(DISPLAY_FRAMEBUFFER) };
-    framebuffer.fill_rgb565(0x0000);
-
-    let mut backend = slint_backend::SlintBackend::init_default().ok();
-    let ui = if backend.is_some() {
-        slint_ui::create_app_ui().ok()
-    } else {
-        None
-    };
-
-    let ui_enabled = ui.is_some() && backend.is_some();
-    if ui_enabled {
-        if let (Some(ui_ref), Some(backend_ref)) = (ui.as_ref(), backend.as_mut()) {
-            ui_ref.set_tilt_ratio(0.5);
-            backend_ref.request_redraw();
-            let _ = backend_ref.render_if_needed(&mut display);
-        }
-    } else {
-        framebuffer.fill_rgb565(0x001F);
-        display.write_framebuffer(framebuffer).await;
-    }
-
-    let mut imu_ui_rx = IMU_WATCH.receiver().unwrap();
-    let mut touch_ui_rx = TOUCH_WATCH.receiver().unwrap();
-    let mut latest_imu = imu_ui_rx.try_get().unwrap_or_default();
-    let mut ui_dirty = true;
-    let mut ui_data_ticks = 0u32;
+    spawner.spawn(
+        tasks::usb_telemetry::usb_telemetry_task(class, imu_pipeline, touch_pipeline).unwrap(),
+    );
 
     loop {
-        while let Some(frame) = imu_ui_rx.try_changed() {
-            latest_imu = frame;
-            ui_dirty = true;
-        }
-        while let Some(frame) = touch_ui_rx.try_changed() {
-            if let Some(backend_ref) = backend.as_mut() {
-                let _ = backend_ref.inject_touch_sample(touch_sample_to_xy(frame.sample));
-            }
-        }
-
-        ui_data_ticks = ui_data_ticks.saturating_add(UI_RENDER_PERIOD_MS as u32);
-        if ui_data_ticks >= UI_DATA_REFRESH_MS as u32 {
-            ui_data_ticks = 0;
-            ui_dirty = true;
-        }
-
-        if ui_dirty {
-            if let Some(ui_ref) = ui.as_ref() {
-                let tilt = latest_imu.sample.tilt_deg_from_accel_8g();
-                let pitch = tilt.pitch_deg;
-                let ratio = ((pitch + 90.0) / 180.0).clamp(0.0, 1.0);
-                ui_ref.set_tilt_ratio(ratio);
-            }
-            if let Some(backend_ref) = backend.as_ref() {
-                backend_ref.request_redraw();
-            }
-            ui_dirty = false;
-        }
-
-        if ui_enabled {
-            if let Some(backend_ref) = backend.as_mut() {
-                let _ = backend_ref.render_if_needed(&mut display);
-            }
-        }
-
-        Timer::after(Duration::from_millis(UI_RENDER_PERIOD_MS)).await;
+        Timer::after(Duration::from_secs(1)).await;
     }
 }
