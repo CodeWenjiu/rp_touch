@@ -7,8 +7,9 @@ use embassy_time::{Duration, Timer};
 use panic_probe as _;
 use static_cell::StaticCell;
 
+const IMU_REPORT_PERIOD_MS: u64 = 100;
+
 // Program metadata for `picotool info`.
-// This isn't needed, but it's recommended to have these minimal entries.
 #[unsafe(link_section = ".bi_entries")]
 #[used]
 pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
@@ -28,6 +29,7 @@ async fn main(spawner: Spawner) {
     board_alloc::init();
 
     let p = embassy_rp::init(Default::default());
+
     let mut display = co5300_driver::Co5300::new_default();
     display.init_default().await;
     let framebuffer = unsafe { &mut *core::ptr::addr_of_mut!(DISPLAY_FRAMEBUFFER) };
@@ -41,7 +43,6 @@ async fn main(spawner: Spawner) {
 
     let mut class = usb_serial::init(spawner, p.USB, usb_serial::UsbSerialConfig::default());
     let mut serial = usb_serial::UsbTextWriter::new(&mut class);
-
     serial.wait_connection().await;
     let _ = usb_serial::usb_println!(serial, "BOOT,display_ready");
 
@@ -50,7 +51,7 @@ async fn main(spawner: Spawner) {
     loop {
         match select(
             serial.read_packet(&mut buf),
-            Timer::after(Duration::from_millis(100)),
+            Timer::after(Duration::from_millis(IMU_REPORT_PERIOD_MS)),
         )
         .await
         {
@@ -62,10 +63,8 @@ async fn main(spawner: Spawner) {
             Either::First(Err(_)) => {}
             Either::Second(()) => {
                 let frame = imu_reader.read_latest_frame();
-                if frame.seq != 0 {
-                    let tilt = frame.sample.tilt_deg_from_accel_8g();
-                    let _ = usb_serial::usb_println!(serial, "{}", tilt);
-                }
+                let tilt = frame.sample.tilt_deg_from_accel_8g();
+                let _ = usb_serial::usb_println!(serial, "{}", tilt);
             }
         }
     }

@@ -1,19 +1,18 @@
 use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 
-use embassy_sync::{
-    blocking_mutex::raw::NoopRawMutex,
-    channel::{Channel, TryReceiveError},
-};
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 
 use crate::types::{CaptureState, CaptureStats, ImuFrame, ImuRawSample};
+
+mod reader;
+
+pub const IMU_FRAME_QUEUE_CAPACITY: usize = 128;
 
 const STATE_STARTING: u8 = 0;
 const STATE_RUNNING: u8 = 1;
 const STATE_INIT_FAILED: u8 = 2;
 const STATE_INVALID_CHIP_ID: u8 = 3;
 const STATE_FIFO_CONFIG_FAILED: u8 = 4;
-
-pub const IMU_FRAME_QUEUE_CAPACITY: usize = 128;
 
 pub struct ImuPipeline {
     channel: Channel<NoopRawMutex, ImuFrame, IMU_FRAME_QUEUE_CAPACITY>,
@@ -111,33 +110,4 @@ impl Default for ImuPipeline {
 pub struct ImuReader<'a> {
     pipeline: &'a ImuPipeline,
     latest: ImuFrame,
-}
-
-impl<'a> ImuReader<'a> {
-    pub fn read_latest_frame(&mut self) -> ImuFrame {
-        while let Ok(frame) = self.pipeline.channel.try_receive() {
-            self.pipeline.popped_samples.fetch_add(1, Ordering::Relaxed);
-            self.latest = frame;
-        }
-        self.latest
-    }
-
-    pub fn read_batch_frames<const N: usize>(&mut self) -> heapless::Vec<ImuFrame, N> {
-        let mut out = heapless::Vec::<ImuFrame, N>::new();
-        while out.len() < out.capacity() {
-            match self.pipeline.channel.try_receive() {
-                Ok(frame) => {
-                    self.pipeline.popped_samples.fetch_add(1, Ordering::Relaxed);
-                    self.latest = frame;
-                    let _ = out.push(frame);
-                }
-                Err(TryReceiveError::Empty) => break,
-            }
-        }
-        out
-    }
-
-    pub fn latest_cached(&self) -> ImuFrame {
-        self.latest
-    }
 }
