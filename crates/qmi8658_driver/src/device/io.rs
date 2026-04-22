@@ -1,3 +1,5 @@
+use embedded_hal_async::i2c::I2c as _;
+
 use crate::{
     regs::{
         CTRL9_CMD_ACK, QMI8658_REG_CTRL9, QMI8658_REG_FIFO_DATA, QMI8658_REG_STATUSINT,
@@ -10,9 +12,8 @@ use super::Qmi8658;
 
 impl<'d> Qmi8658<'d> {
     pub async fn write_reg(&mut self, reg: u8, value: u8) -> Result<(), Error> {
-        self.i2c
-            .write_async(self.address, [reg, value].iter().copied())
-            .await?;
+        let bytes = [reg, value];
+        self.i2c.write(self.address, &bytes).await?;
         Ok(())
     }
 
@@ -23,15 +24,13 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub async fn read_regs(&mut self, start_reg: u8, out: &mut [u8]) -> Result<(), Error> {
-        self.i2c
-            .write_read_async(self.address, [start_reg].iter().copied(), out)
-            .await?;
+        self.i2c.write_read(self.address, &[start_reg], out).await?;
         Ok(())
     }
 
     pub(super) async fn read_fifo_bytes(&mut self, out: &mut [u8]) -> Result<(), Error> {
         self.i2c
-            .write_read_async(self.address, [QMI8658_REG_FIFO_DATA].iter().copied(), out)
+            .write_read(self.address, &[QMI8658_REG_FIFO_DATA], out)
             .await?;
         Ok(())
     }

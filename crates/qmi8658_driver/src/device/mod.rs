@@ -1,9 +1,11 @@
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_rp::{
-    Peri, bind_interrupts,
+    Peri,
     gpio::Input,
-    i2c::{self, Async, Config as I2cConfig, I2c},
+    i2c::{Async, I2c},
     peripherals,
 };
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 
 use crate::{
@@ -22,26 +24,24 @@ use crate::{
 mod io;
 mod stream;
 
-bind_interrupts!(struct Irqs {
-    I2C1_IRQ => i2c::InterruptHandler<peripherals::I2C1>;
-});
-
 pub struct Qmi8658<'d> {
-    i2c: I2c<'d, peripherals::I2C1, Async>,
+    i2c: SharedI2cDevice<'d>,
     int1: Input<'d>,
     address: u8,
     fifo_ctrl_cfg: u8,
 }
+
+type SharedBusInner<'d> = I2c<'d, peripherals::I2C1, Async>;
+pub type SharedI2cBus<'d> = Mutex<NoopRawMutex, SharedBusInner<'d>>;
+type SharedI2cDevice<'d> = I2cDevice<'d, NoopRawMutex, SharedBusInner<'d>>;
 
 impl<'d> Qmi8658<'d> {
     const INIT_BOOT_WAIT_MS: u64 = 15;
     const SOFT_RESET_WAIT_MS: u64 = 20;
     const WHO_AM_I_RETRIES: usize = 5;
 
-    pub fn new(
-        i2c: Peri<'d, peripherals::I2C1>,
-        sda: Peri<'d, peripherals::PIN_6>,
-        scl: Peri<'d, peripherals::PIN_7>,
+    pub fn new_shared(
+        i2c_bus: &'d SharedI2cBus<'d>,
         int1: Peri<'d, peripherals::PIN_8>,
         config: Qmi8658Config,
     ) -> Result<Self, Error> {
@@ -49,16 +49,10 @@ impl<'d> Qmi8658<'d> {
             return Err(Error::InvalidAddress(config.address));
         }
 
-        let mut i2c_config = I2cConfig::default();
-        i2c_config.frequency = config.i2c_frequency_hz;
-        i2c_config.sda_pullup = true;
-        i2c_config.scl_pullup = true;
-
-        let i2c = I2c::new_async(i2c, scl, sda, Irqs, i2c_config);
         let int1 = Input::new(int1, config.int1_pull);
 
         Ok(Self {
-            i2c,
+            i2c: I2cDevice::new(i2c_bus),
             int1,
             address: config.address,
             fifo_ctrl_cfg: 0,
@@ -145,19 +139,5 @@ impl<'d> Qmi8658<'d> {
 
     pub fn int1_is_high(&self) -> bool {
         self.int1.is_high()
-    }
-}
-
-impl Qmi8658<'static> {
-    pub fn new_default() -> Result<Self, Error> {
-        unsafe {
-            Self::new(
-                peripherals::I2C1::steal(),
-                peripherals::PIN_6::steal(),
-                peripherals::PIN_7::steal(),
-                peripherals::PIN_8::steal(),
-                Qmi8658Config::default(),
-            )
-        }
     }
 }

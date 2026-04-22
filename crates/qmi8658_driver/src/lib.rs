@@ -7,7 +7,7 @@ mod storage;
 mod task;
 mod types;
 
-pub use device::Qmi8658;
+pub use device::{Qmi8658, SharedI2cBus};
 pub use format::{format_report_line, format_sample_line};
 pub use regs::{
     QMI8658_CHIP_ID, QMI8658_I2C_ADDR, QMI8658_REG_AX_L, QMI8658_REG_CTRL1, QMI8658_REG_CTRL2,

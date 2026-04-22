@@ -1,10 +1,11 @@
 [workspace]
-members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc"]
+members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc", "crates/ft3168_driver"]
 default-members = ["app"]
 resolver = "2"
 
 [workspace.dependencies]
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-embedded-hal = "0.6.0"
 embassy-futures = "0.1.2"
 embassy-rp = { version = "0.10.0", features = ["unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
 embassy-sync = "0.8.0"
@@ -16,6 +17,7 @@ heapless = "0.9"
 micromath = "2.1.0"
 panic-probe = "1.0.0"
 static_cell = "2.1"
+embedded-hal-async = "1.0.0"
 
 [profile.release]
 # Enable generation of debug symbols even on release builds

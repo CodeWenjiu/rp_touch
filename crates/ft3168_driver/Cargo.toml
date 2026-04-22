@@ -1,5 +1,5 @@
 [package]
-name = "qmi8658_driver"
+name = "ft3168_driver"
 version = "0.1.0"
 edition = "2024"
 
@@ -11,4 +11,3 @@ embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
 embedded-hal-async = { workspace = true }
 heapless = { workspace = true }
-micromath = { workspace = true }
