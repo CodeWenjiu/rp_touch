@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver"]
+members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc"]
 default-members = ["app"]
 resolver = "2"
 

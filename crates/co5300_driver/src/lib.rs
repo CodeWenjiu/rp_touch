@@ -96,7 +96,7 @@ pub struct Co5300<'d> {
 }
 
 impl<'d> Co5300<'d> {
-    pub fn new_default(
+    pub fn new(
         spi: Peri<'d, peripherals::SPI1>,
         dma_ch: Peri<'d, peripherals::DMA_CH0>,
         cs: Peri<'d, peripherals::PIN_9>,
@@ -203,6 +203,21 @@ impl<'d> Co5300<'d> {
         }
         for chunk in bytes.chunks(DMA_CHUNK_BYTES) {
             let _ = self.spi.write(chunk).await;
+        }
+    }
+}
+
+impl Co5300<'static> {
+    pub fn new_default() -> Self {
+        unsafe {
+            Self::new(
+                peripherals::SPI1::steal(),
+                peripherals::DMA_CH0::steal(),
+                peripherals::PIN_9::steal(),
+                peripherals::PIN_10::steal(),
+                peripherals::PIN_11::steal(),
+                peripherals::PIN_15::steal(),
+            )
         }
     }
 }

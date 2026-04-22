@@ -27,13 +27,13 @@ dependencies = [
 name = "app"
 version = "0.1.0"
 dependencies = [
+ "board_alloc",
  "co5300_driver",
  "cortex-m-rt",
  "embassy-executor",
  "embassy-futures",
  "embassy-rp",
  "embassy-time",
- "embedded-alloc",
  "heapless 0.9.2",
  "panic-probe",
  "qmi8658_driver",
@@ -123,6 +123,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "board_alloc"
+version = "0.1.0"
+dependencies = [
+ "embedded-alloc",
 ]
 
 [[package]]

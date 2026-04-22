@@ -65,15 +65,6 @@ impl<'d> Qmi8658<'d> {
         })
     }
 
-    pub fn new_default(
-        i2c: Peri<'d, peripherals::I2C1>,
-        sda: Peri<'d, peripherals::PIN_6>,
-        scl: Peri<'d, peripherals::PIN_7>,
-        int1: Peri<'d, peripherals::PIN_8>,
-    ) -> Result<Self, Error> {
-        Self::new(i2c, sda, scl, int1, Qmi8658Config::default())
-    }
-
     pub async fn init(&mut self) -> Result<u8, Error> {
         // Give the IMU enough boot time before the first I2C access.
         Timer::after(Duration::from_millis(Self::INIT_BOOT_WAIT_MS)).await;
@@ -154,5 +145,19 @@ impl<'d> Qmi8658<'d> {
 
     pub fn int1_is_high(&self) -> bool {
         self.int1.is_high()
+    }
+}
+
+impl Qmi8658<'static> {
+    pub fn new_default() -> Result<Self, Error> {
+        unsafe {
+            Self::new(
+                peripherals::I2C1::steal(),
+                peripherals::PIN_6::steal(),
+                peripherals::PIN_7::steal(),
+                peripherals::PIN_8::steal(),
+                Qmi8658Config::default(),
+            )
+        }
     }
 }
