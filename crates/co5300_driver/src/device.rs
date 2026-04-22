@@ -102,7 +102,10 @@ impl<'d> PioTx<'d> {
 
         let mut sm = pio.sm0;
         sm.set_config(&cfg_single);
-        sm.set_pins(Level::Low, &[&clk_pin, &sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin]);
+        sm.set_pins(
+            Level::Low,
+            &[&clk_pin, &sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin],
+        );
         sm.set_pin_dirs(
             Direction::Out,
             &[&clk_pin, &sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin],

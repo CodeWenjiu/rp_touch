@@ -3,7 +3,7 @@ use embassy_rp::{
     i2c::{Async, I2c},
     peripherals,
 };
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 
 use crate::{
@@ -22,8 +22,8 @@ pub struct Ft3168<'d> {
 }
 
 type SharedBusInner<'d> = I2c<'d, peripherals::I2C1, Async>;
-pub type SharedI2cBus<'d> = Mutex<NoopRawMutex, SharedBusInner<'d>>;
-type SharedI2cDevice<'d> = I2cDevice<'d, NoopRawMutex, SharedBusInner<'d>>;
+pub type SharedI2cBus<'d> = Mutex<CriticalSectionRawMutex, SharedBusInner<'d>>;
+type SharedI2cDevice<'d> = I2cDevice<'d, CriticalSectionRawMutex, SharedBusInner<'d>>;
 
 impl<'d> Ft3168<'d> {
     pub fn new_shared(i2c_bus: &'d SharedI2cBus<'d>, config: Ft3168Config) -> Result<Self, Error> {

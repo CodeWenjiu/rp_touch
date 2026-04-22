@@ -1,5 +1,3 @@
-use embedded_hal_async::i2c::I2c as _;
-
 use crate::{
     regs::{
         CTRL9_CMD_ACK, QMI8658_REG_CTRL9, QMI8658_REG_FIFO_DATA, QMI8658_REG_STATUSINT,
@@ -7,6 +5,7 @@ use crate::{
     },
     types::Error,
 };
+use embedded_hal_async::i2c::I2c as _;
 
 use super::Qmi8658;
 

@@ -78,9 +78,9 @@ impl ImuPipeline {
                 self.invalid_chip_id.store(chip_id, Ordering::Relaxed);
                 self.state.store(STATE_INVALID_CHIP_ID, Ordering::Relaxed);
             }
-            CaptureState::FifoConfigFailed => {
-                self.state.store(STATE_FIFO_CONFIG_FAILED, Ordering::Relaxed)
-            }
+            CaptureState::FifoConfigFailed => self
+                .state
+                .store(STATE_FIFO_CONFIG_FAILED, Ordering::Relaxed),
         }
     }
 
