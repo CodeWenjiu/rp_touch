@@ -20,7 +20,7 @@ pub const MAX_STABLE_SCLK_HZ: u32 = 32_000_000;
 pub(crate) const BOARD_SCLK_HZ: u32 = MAX_STABLE_SCLK_HZ;
 
 pub(crate) const DEFAULT_CMD_PREFIX: u8 = 0x02;
-pub(crate) const DEFAULT_DATA_PREFIX: u8 = 0x02;
+pub(crate) const DEFAULT_DATA_PREFIX: u8 = 0x32;
 pub(crate) const DEFAULT_WINDOW_X_OFFSET: u16 = 20;
 pub(crate) const DEFAULT_WINDOW_Y_OFFSET: u16 = 0;
 

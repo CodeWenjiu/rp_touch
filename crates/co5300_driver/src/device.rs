@@ -1,8 +1,9 @@
 use embassy_rp::{
     Peri, bind_interrupts, dma,
-    gpio::{Level, Output},
+    gpio::{Drive, Level, Output, SlewRate},
     peripherals,
-    spi::{self, Spi},
+    pio::{self, Direction, FifoJoin, Pio, ShiftDirection, StateMachine},
+    pio_programs::clock_divider::calculate_pio_clock_divider,
 };
 use embassy_time::{Duration, Timer};
 
@@ -14,10 +15,156 @@ use crate::{
 
 bind_interrupts!(struct Irqs {
     DMA_IRQ_0 => dma::InterruptHandler<peripherals::DMA_CH0>;
+    PIO0_IRQ_0 => pio::InterruptHandler<peripherals::PIO0>;
 });
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxMode {
+    Single,
+    Quad,
+}
+
+struct PioTx<'d> {
+    sm: StateMachine<'d, peripherals::PIO0, 0>,
+    dma: dma::Channel<'d>,
+    cfg_single: pio::Config<'d, peripherals::PIO0>,
+    cfg_quad: pio::Config<'d, peripherals::PIO0>,
+    mode: TxMode,
+}
+
+impl<'d> PioTx<'d> {
+    fn new(
+        pio: Peri<'d, peripherals::PIO0>,
+        dma_ch: Peri<'d, peripherals::DMA_CH0>,
+        clk: Peri<'d, peripherals::PIN_10>,
+        sio0: Peri<'d, peripherals::PIN_11>,
+        sio1: Peri<'d, peripherals::PIN_12>,
+        sio2: Peri<'d, peripherals::PIN_13>,
+        sio3: Peri<'d, peripherals::PIN_14>,
+    ) -> Self {
+        let mut pio = Pio::new(pio, Irqs);
+        let dma = dma::Channel::new(dma_ch, Irqs);
+
+        let mut clk_pin = pio.common.make_pio_pin(clk);
+        let mut sio0_pin = pio.common.make_pio_pin(sio0);
+        let mut sio1_pin = pio.common.make_pio_pin(sio1);
+        let mut sio2_pin = pio.common.make_pio_pin(sio2);
+        let mut sio3_pin = pio.common.make_pio_pin(sio3);
+
+        for pin in [
+            &mut clk_pin,
+            &mut sio0_pin,
+            &mut sio1_pin,
+            &mut sio2_pin,
+            &mut sio3_pin,
+        ] {
+            pin.set_drive_strength(Drive::_12mA);
+            pin.set_slew_rate(SlewRate::Fast);
+        }
+
+        let single_program = pio::program::pio_asm!(
+            ".side_set 1",
+            ".wrap_target",
+            "out pins, 1 side 0",
+            "nop side 1",
+            ".wrap",
+        );
+        let quad_program = pio::program::pio_asm!(
+            ".side_set 1",
+            ".wrap_target",
+            "out pins, 4 side 0",
+            "nop side 1",
+            ".wrap",
+        );
+        let single_program = pio.common.load_program(&single_program.program);
+        let quad_program = pio.common.load_program(&quad_program.program);
+
+        let mut cfg_single = pio::Config::default();
+        cfg_single.use_program(&single_program, &[&clk_pin]);
+        cfg_single.set_out_pins(&[&sio0_pin]);
+        cfg_single.shift_out.auto_fill = true;
+        cfg_single.shift_out.direction = ShiftDirection::Left;
+        cfg_single.shift_out.threshold = 8;
+        cfg_single.fifo_join = FifoJoin::TxOnly;
+
+        let mut cfg_quad = pio::Config::default();
+        cfg_quad.use_program(&quad_program, &[&clk_pin]);
+        cfg_quad.set_out_pins(&[&sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin]);
+        cfg_quad.shift_out.auto_fill = true;
+        cfg_quad.shift_out.direction = ShiftDirection::Left;
+        cfg_quad.shift_out.threshold = 8;
+        cfg_quad.fifo_join = FifoJoin::TxOnly;
+
+        let serial_hz = BOARD_SCLK_HZ.min(MAX_STABLE_SCLK_HZ);
+        let divider = calculate_pio_clock_divider(serial_hz.saturating_mul(2));
+        cfg_single.clock_divider = divider;
+        cfg_quad.clock_divider = divider;
+
+        let mut sm = pio.sm0;
+        sm.set_config(&cfg_single);
+        sm.set_pins(Level::Low, &[&clk_pin, &sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin]);
+        sm.set_pin_dirs(
+            Direction::Out,
+            &[&clk_pin, &sio0_pin, &sio1_pin, &sio2_pin, &sio3_pin],
+        );
+        sm.clear_fifos();
+        sm.set_enable(true);
+
+        Self {
+            sm,
+            dma,
+            cfg_single,
+            cfg_quad,
+            mode: TxMode::Single,
+        }
+    }
+
+    async fn write_single(&mut self, bytes: &[u8]) {
+        self.write(TxMode::Single, bytes).await;
+    }
+
+    async fn write_quad(&mut self, bytes: &[u8]) {
+        self.write(TxMode::Quad, bytes).await;
+    }
+
+    async fn write(&mut self, mode: TxMode, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+
+        self.switch_mode(mode);
+
+        for chunk in bytes.chunks(DMA_CHUNK_BYTES) {
+            self.sm.tx().dma_push(&mut self.dma, chunk, false).await;
+        }
+
+        self.flush_tx();
+    }
+
+    fn switch_mode(&mut self, mode: TxMode) {
+        if self.mode == mode {
+            return;
+        }
+
+        self.sm.set_enable(false);
+        match mode {
+            TxMode::Single => self.sm.set_config(&self.cfg_single),
+            TxMode::Quad => self.sm.set_config(&self.cfg_quad),
+        }
+        self.sm.clear_fifos();
+        self.sm.restart();
+        self.sm.set_enable(true);
+        self.mode = mode;
+    }
+
+    fn flush_tx(&mut self) {
+        while !self.sm.tx().empty() {}
+        while !self.sm.tx().stalled() {}
+    }
+}
+
 pub struct Co5300<'d> {
-    spi: Spi<'d, peripherals::SPI1, spi::Async>,
+    tx: PioTx<'d>,
     cs: Output<'d>,
     reset: Output<'d>,
     tuning: Co5300Tuning,
@@ -25,16 +172,17 @@ pub struct Co5300<'d> {
 
 impl<'d> Co5300<'d> {
     pub fn new(
-        spi: Peri<'d, peripherals::SPI1>,
+        pio: Peri<'d, peripherals::PIO0>,
         dma_ch: Peri<'d, peripherals::DMA_CH0>,
         cs: Peri<'d, peripherals::PIN_9>,
         clk: Peri<'d, peripherals::PIN_10>,
-        mosi: Peri<'d, peripherals::PIN_11>,
+        sio0: Peri<'d, peripherals::PIN_11>,
+        sio1: Peri<'d, peripherals::PIN_12>,
+        sio2: Peri<'d, peripherals::PIN_13>,
+        sio3: Peri<'d, peripherals::PIN_14>,
         reset: Peri<'d, peripherals::PIN_15>,
     ) -> Self {
-        let mut spi_cfg = spi::Config::default();
-        spi_cfg.frequency = BOARD_SCLK_HZ.min(MAX_STABLE_SCLK_HZ);
-        let spi = Spi::new_txonly(spi, clk, mosi, dma_ch, Irqs, spi_cfg);
+        let tx = PioTx::new(pio, dma_ch, clk, sio0, sio1, sio2, sio3);
 
         let mut cs = Output::new(cs, Level::High);
         cs.set_high();
@@ -42,7 +190,7 @@ impl<'d> Co5300<'d> {
         reset.set_high();
 
         Self {
-            spi,
+            tx,
             cs,
             reset,
             tuning: Co5300Tuning::default(),
@@ -116,8 +264,8 @@ impl<'d> Co5300<'d> {
 
             self.cs.set_low();
             let cmd_header = Self::qspi_flash_header(self.tuning.data_prefix, CMD_MEMORY_WRITE);
-            self.push_raw(&cmd_header).await;
-            self.push_raw(&fb_bytes[start..end]).await;
+            self.push_single(&cmd_header).await;
+            self.push_quad(&fb_bytes[start..end]).await;
             self.cs.set_high();
         }
     }
@@ -132,10 +280,10 @@ impl<'d> Co5300<'d> {
     pub async fn write_command(&mut self, command: u8, params: &[u8]) {
         self.cs.set_low();
         let cmd_header = Self::qspi_flash_header(self.tuning.cmd_prefix, command);
-        self.push_raw(&cmd_header).await;
+        self.push_single(&cmd_header).await;
 
         if !params.is_empty() {
-            self.push_raw(params).await;
+            self.push_single(params).await;
         }
 
         self.cs.set_high();
@@ -143,7 +291,7 @@ impl<'d> Co5300<'d> {
 
     pub async fn write_data(&mut self, payload: &[u8]) {
         self.cs.set_low();
-        self.push_raw(payload).await;
+        self.push_single(payload).await;
         self.cs.set_high();
     }
 
@@ -152,13 +300,12 @@ impl<'d> Co5300<'d> {
         [opcode, 0x00, reg, 0x00]
     }
 
-    async fn push_raw(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        for chunk in bytes.chunks(DMA_CHUNK_BYTES) {
-            let _ = self.spi.write(chunk).await;
-        }
+    async fn push_single(&mut self, bytes: &[u8]) {
+        self.tx.write_single(bytes).await;
+    }
+
+    async fn push_quad(&mut self, bytes: &[u8]) {
+        self.tx.write_quad(bytes).await;
     }
 }
 
@@ -166,11 +313,14 @@ impl Co5300<'static> {
     pub fn new_default() -> Self {
         unsafe {
             Self::new(
-                peripherals::SPI1::steal(),
+                peripherals::PIO0::steal(),
                 peripherals::DMA_CH0::steal(),
                 peripherals::PIN_9::steal(),
                 peripherals::PIN_10::steal(),
                 peripherals::PIN_11::steal(),
+                peripherals::PIN_12::steal(),
+                peripherals::PIN_13::steal(),
+                peripherals::PIN_14::steal(),
                 peripherals::PIN_15::steal(),
             )
         }
