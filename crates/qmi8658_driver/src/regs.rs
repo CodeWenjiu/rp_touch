@@ -14,6 +14,7 @@ pub const QMI8658_REG_FIFO_STATUS: u8 = 0x16;
 pub const QMI8658_REG_FIFO_DATA: u8 = 0x17;
 pub const QMI8658_REG_STATUSINT: u8 = 0x2D;
 pub const QMI8658_REG_AX_L: u8 = 0x35;
+pub const QMI8658_REG_RESET: u8 = 0x60;
 
 pub(crate) const CTRL1_BASE: u8 = 0x60;
 pub(crate) const CTRL1_ADDR_AI: u8 = 1 << 6;
@@ -40,3 +41,4 @@ pub(crate) const FIFO_CTRL_SIZE_SHIFT: u8 = 2;
 pub(crate) const FIFO_CTRL_MODE_MASK: u8 = 0b11;
 
 pub(crate) const STATUSINT_CMD_DONE: u8 = 1 << 7;
+pub(crate) const RESET_SOFT_CMD: u8 = 0xB0;

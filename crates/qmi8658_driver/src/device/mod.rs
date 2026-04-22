@@ -11,6 +11,7 @@ use crate::{
         CTRL1_ADDR_AI, CTRL1_BASE, CTRL1_FIFO_INT_SEL, CTRL1_INT1_EN,
         CTRL2_DEFAULT_ACCEL_8G_1000HZ, CTRL3_DEFAULT_GYRO_512DPS_1000HZ, CTRL7_ACCEL_ENABLE,
         CTRL7_GYRO_ENABLE, CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT, CTRL9_CMD_RST_FIFO,
+        RESET_SOFT_CMD, QMI8658_REG_RESET,
         QMI8658_CHIP_ID, QMI8658_REG_CTRL1, QMI8658_REG_CTRL2, QMI8658_REG_CTRL3,
         QMI8658_REG_CTRL7, QMI8658_REG_CTRL8, QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_WTM_TH,
         QMI8658_REG_WHO_AM_I,
@@ -33,6 +34,10 @@ pub struct Qmi8658<'d> {
 }
 
 impl<'d> Qmi8658<'d> {
+    const INIT_BOOT_WAIT_MS: u64 = 15;
+    const SOFT_RESET_WAIT_MS: u64 = 20;
+    const WHO_AM_I_RETRIES: usize = 5;
+
     pub fn new(
         i2c: Peri<'d, peripherals::I2C1>,
         sda: Peri<'d, peripherals::PIN_6>,
@@ -71,14 +76,22 @@ impl<'d> Qmi8658<'d> {
 
     pub async fn init(&mut self) -> Result<u8, Error> {
         // Give the IMU enough boot time before the first I2C access.
-        Timer::after(Duration::from_millis(15)).await;
+        Timer::after(Duration::from_millis(Self::INIT_BOOT_WAIT_MS)).await;
 
-        let who_am_i = self.device_id().await?;
-        if who_am_i != QMI8658_CHIP_ID {
-            return Err(Error::InvalidChipId(who_am_i));
+        self.soft_reset().await?;
+
+        let mut last_chip_id = 0u8;
+        for _ in 0..Self::WHO_AM_I_RETRIES {
+            let who_am_i = self.device_id().await?;
+            last_chip_id = who_am_i;
+            if who_am_i == QMI8658_CHIP_ID {
+                return Ok(who_am_i);
+            }
+
+            Timer::after(Duration::from_millis(2)).await;
         }
 
-        Ok(who_am_i)
+        Err(Error::InvalidChipId(last_chip_id))
     }
 
     pub async fn device_id(&mut self) -> Result<u8, Error> {
@@ -123,6 +136,12 @@ impl<'d> Qmi8658<'d> {
         self.enable_fifo_wtm_int1(config)
             .await
             .map_err(|_| ImuReport::FifoConfigError)
+    }
+
+    pub async fn soft_reset(&mut self) -> Result<(), Error> {
+        self.write_reg(QMI8658_REG_RESET, RESET_SOFT_CMD).await?;
+        Timer::after(Duration::from_millis(Self::SOFT_RESET_WAIT_MS)).await;
+        Ok(())
     }
 
     pub async fn wait_int1_rising_edge(&mut self) {

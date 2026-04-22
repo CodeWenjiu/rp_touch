@@ -1,148 +1,143 @@
-use core::cell::RefCell;
+use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 
-use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
-
-use crate::types::{CaptureStats, ImuFrame, ImuRawSample};
-
-const RING_CAPACITY: usize = 128;
-const ZERO_SAMPLE: ImuRawSample = ImuRawSample {
-    accel: [0; 3],
-    gyro: [0; 3],
-};
-const ZERO_FRAME: ImuFrame = ImuFrame {
-    seq: 0,
-    sample: ZERO_SAMPLE,
+use embassy_sync::{
+    blocking_mutex::raw::NoopRawMutex,
+    channel::{Channel, TryReceiveError},
 };
 
-struct SampleRing {
-    frames: [ImuFrame; RING_CAPACITY],
-    read: usize,
-    write: usize,
-    len: usize,
+use crate::types::{CaptureState, CaptureStats, ImuFrame, ImuRawSample};
+
+const STATE_STARTING: u8 = 0;
+const STATE_RUNNING: u8 = 1;
+const STATE_INIT_FAILED: u8 = 2;
+const STATE_INVALID_CHIP_ID: u8 = 3;
+const STATE_FIFO_CONFIG_FAILED: u8 = 4;
+
+pub const IMU_FRAME_QUEUE_CAPACITY: usize = 128;
+
+pub struct ImuPipeline {
+    channel: Channel<NoopRawMutex, ImuFrame, IMU_FRAME_QUEUE_CAPACITY>,
+    state: AtomicU8,
+    invalid_chip_id: AtomicU8,
+    pushed_samples: AtomicU32,
+    popped_samples: AtomicU32,
+    dropped_samples: AtomicU32,
+    read_fail_count: AtomicU32,
+    latest_seq: AtomicU32,
+    next_seq: AtomicU32,
 }
 
-impl SampleRing {
-    const fn new() -> Self {
+impl ImuPipeline {
+    pub const fn new() -> Self {
         Self {
-            frames: [ZERO_FRAME; RING_CAPACITY],
-            read: 0,
-            write: 0,
-            len: 0,
+            channel: Channel::new(),
+            state: AtomicU8::new(STATE_STARTING),
+            invalid_chip_id: AtomicU8::new(0),
+            pushed_samples: AtomicU32::new(0),
+            popped_samples: AtomicU32::new(0),
+            dropped_samples: AtomicU32::new(0),
+            read_fail_count: AtomicU32::new(0),
+            latest_seq: AtomicU32::new(0),
+            next_seq: AtomicU32::new(1),
         }
     }
 
-    fn push(&mut self, frame: ImuFrame) -> bool {
-        let mut dropped = false;
-        if self.len == RING_CAPACITY {
-            self.read = (self.read + 1) % RING_CAPACITY;
-            self.len -= 1;
-            dropped = true;
+    pub fn reader(&self) -> ImuReader<'_> {
+        ImuReader {
+            pipeline: self,
+            latest: ImuFrame::default(),
         }
-
-        self.frames[self.write] = frame;
-        self.write = (self.write + 1) % RING_CAPACITY;
-        self.len += 1;
-        dropped
     }
 
-    fn pop_frames_into(&mut self, out: &mut [ImuFrame]) -> usize {
-        let mut count = 0usize;
-        while count < out.len() && self.len > 0 {
-            out[count] = self.frames[self.read];
-            self.read = (self.read + 1) % RING_CAPACITY;
-            self.len -= 1;
-            count += 1;
-        }
-        count
-    }
-
-    fn latest(&self) -> Option<ImuFrame> {
-        if self.len == 0 {
-            return None;
-        }
-
-        let idx = if self.write == 0 {
-            RING_CAPACITY - 1
-        } else {
-            self.write - 1
+    pub fn capture_stats(&self) -> CaptureStats {
+        let state = match self.state.load(Ordering::Relaxed) {
+            STATE_RUNNING => CaptureState::Running,
+            STATE_INIT_FAILED => CaptureState::InitFailed,
+            STATE_INVALID_CHIP_ID => {
+                CaptureState::InvalidChipId(self.invalid_chip_id.load(Ordering::Relaxed))
+            }
+            STATE_FIFO_CONFIG_FAILED => CaptureState::FifoConfigFailed,
+            _ => CaptureState::Starting,
         };
-        Some(self.frames[idx])
+
+        CaptureStats {
+            state,
+            pushed_samples: self.pushed_samples.load(Ordering::Relaxed),
+            popped_samples: self.popped_samples.load(Ordering::Relaxed),
+            dropped_samples: self.dropped_samples.load(Ordering::Relaxed),
+            read_fail_count: self.read_fail_count.load(Ordering::Relaxed),
+            latest_seq: self.latest_seq.load(Ordering::Relaxed),
+        }
+    }
+
+    pub(crate) fn set_state(&self, state: CaptureState) {
+        match state {
+            CaptureState::Starting => self.state.store(STATE_STARTING, Ordering::Relaxed),
+            CaptureState::Running => self.state.store(STATE_RUNNING, Ordering::Relaxed),
+            CaptureState::InitFailed => self.state.store(STATE_INIT_FAILED, Ordering::Relaxed),
+            CaptureState::InvalidChipId(chip_id) => {
+                self.invalid_chip_id.store(chip_id, Ordering::Relaxed);
+                self.state.store(STATE_INVALID_CHIP_ID, Ordering::Relaxed);
+            }
+            CaptureState::FifoConfigFailed => {
+                self.state.store(STATE_FIFO_CONFIG_FAILED, Ordering::Relaxed)
+            }
+        }
+    }
+
+    pub(crate) fn push_sample(&self, sample: ImuRawSample) {
+        let seq = self.next_seq.fetch_add(1, Ordering::Relaxed);
+        let frame = ImuFrame { seq, sample };
+
+        if self.channel.try_send(frame).is_err() {
+            self.dropped_samples.fetch_add(1, Ordering::Relaxed);
+        }
+
+        self.pushed_samples.fetch_add(1, Ordering::Relaxed);
+        self.latest_seq.store(seq, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_read_fail_count(&self, count: u32) {
+        self.read_fail_count.store(count, Ordering::Relaxed);
     }
 }
 
-struct CaptureStorage {
-    ring: SampleRing,
-    stats: CaptureStats,
-    next_seq: u32,
-}
-
-impl CaptureStorage {
-    const fn new() -> Self {
-        Self {
-            ring: SampleRing::new(),
-            stats: CaptureStats {
-                state: crate::types::CaptureState::Starting,
-                pushed_samples: 0,
-                popped_samples: 0,
-                dropped_samples: 0,
-                read_fail_count: 0,
-                latest_seq: None,
-            },
-            next_seq: 0,
-        }
+impl Default for ImuPipeline {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-static CAPTURE_STORAGE: Mutex<CriticalSectionRawMutex, RefCell<CaptureStorage>> =
-    Mutex::new(RefCell::new(CaptureStorage::new()));
-
-pub(crate) fn set_state(state: crate::types::CaptureState) {
-    CAPTURE_STORAGE.lock(|storage| {
-        storage.borrow_mut().stats.state = state;
-    });
+pub struct ImuReader<'a> {
+    pipeline: &'a ImuPipeline,
+    latest: ImuFrame,
 }
 
-pub(crate) fn push_sample(sample: ImuRawSample) {
-    CAPTURE_STORAGE.lock(|storage| {
-        let mut storage = storage.borrow_mut();
-        let frame = ImuFrame {
-            seq: storage.next_seq,
-            sample,
-        };
-        storage.next_seq = storage.next_seq.wrapping_add(1);
-
-        if storage.ring.push(frame) {
-            storage.stats.dropped_samples = storage.stats.dropped_samples.saturating_add(1);
+impl<'a> ImuReader<'a> {
+    pub fn read_latest_frame(&mut self) -> ImuFrame {
+        while let Ok(frame) = self.pipeline.channel.try_receive() {
+            self.pipeline.popped_samples.fetch_add(1, Ordering::Relaxed);
+            self.latest = frame;
         }
-        storage.stats.pushed_samples = storage.stats.pushed_samples.saturating_add(1);
-        storage.stats.latest_seq = Some(frame.seq);
-    });
-}
+        self.latest
+    }
 
-pub(crate) fn set_read_fail_count(count: u32) {
-    CAPTURE_STORAGE.lock(|storage| {
-        storage.borrow_mut().stats.read_fail_count = count;
-    });
-}
-
-pub(crate) fn pop_one_frame() -> Option<ImuFrame> {
-    CAPTURE_STORAGE.lock(|storage| {
-        let mut storage = storage.borrow_mut();
-        let mut one = [ZERO_FRAME; 1];
-        let n = storage.ring.pop_frames_into(&mut one);
-        if n == 0 {
-            None
-        } else {
-            storage.stats.popped_samples = storage.stats.popped_samples.saturating_add(1);
-            Some(one[0])
+    pub fn read_batch_frames<const N: usize>(&mut self) -> heapless::Vec<ImuFrame, N> {
+        let mut out = heapless::Vec::<ImuFrame, N>::new();
+        while out.len() < out.capacity() {
+            match self.pipeline.channel.try_receive() {
+                Ok(frame) => {
+                    self.pipeline.popped_samples.fetch_add(1, Ordering::Relaxed);
+                    self.latest = frame;
+                    let _ = out.push(frame);
+                }
+                Err(TryReceiveError::Empty) => break,
+            }
         }
-    })
-}
+        out
+    }
 
-pub(crate) fn latest_frame() -> Option<ImuFrame> {
-    CAPTURE_STORAGE.lock(|storage| storage.borrow().ring.latest())
-}
-
-pub(crate) fn capture_stats() -> CaptureStats {
-    CAPTURE_STORAGE.lock(|storage| storage.borrow().stats)
+    pub fn latest_cached(&self) -> ImuFrame {
+        self.latest
+    }
 }

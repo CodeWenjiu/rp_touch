@@ -13,8 +13,10 @@ embedded-alloc = { workspace = true }
 heapless = { workspace = true }
 cortex-m-rt = { workspace = true }
 panic-probe = { workspace = true }
+static_cell = { workspace = true }
 usb_serial = { path = "../crates/usb_serial" }
 qmi8658_driver = { path = "../crates/qmi8658_driver" }
+co5300_driver = { path = "../crates/co5300_driver" }
 
 [[bin]]
 name = "rp_touch"

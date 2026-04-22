@@ -15,26 +15,9 @@ pub use regs::{
     QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_DATA, QMI8658_REG_FIFO_SMPL_CNT,
     QMI8658_REG_FIFO_STATUS, QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_STATUSINT, QMI8658_REG_WHO_AM_I,
 };
+pub use storage::{IMU_FRAME_QUEUE_CAPACITY, ImuPipeline, ImuReader};
 pub use task::imu_capture_task;
 pub use types::{
     CaptureState, CaptureStats, Error, FifoConfig, FifoMode, FifoSize, ImuFrame, ImuRawSample,
     ImuReport, ImuTiltAngles, Int1FifoStreamState, Qmi8658Config,
 };
-
-pub fn read_latest_frame() -> Option<ImuFrame> {
-    storage::latest_frame()
-}
-
-pub fn read_batch_frames<const N: usize>() -> heapless::Vec<ImuFrame, N> {
-    let mut out = heapless::Vec::<ImuFrame, N>::new();
-    while let Some(frame) = storage::pop_one_frame() {
-        if out.push(frame).is_err() {
-            break;
-        }
-    }
-    out
-}
-
-pub fn capture_stats() -> CaptureStats {
-    storage::capture_stats()
-}

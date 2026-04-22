@@ -145,7 +145,7 @@ pub struct CaptureStats {
     pub popped_samples: u32,
     pub dropped_samples: u32,
     pub read_fail_count: u32,
-    pub latest_seq: Option<u32>,
+    pub latest_seq: u32,
 }
 
 impl Default for CaptureStats {
@@ -156,7 +156,7 @@ impl Default for CaptureStats {
             popped_samples: 0,
             dropped_samples: 0,
             read_fail_count: 0,
-            latest_seq: None,
+            latest_seq: 0,
         }
     }
 }

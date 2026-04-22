@@ -2,7 +2,7 @@ use embassy_time::{Duration, Timer};
 
 use crate::{
     device::Qmi8658,
-    storage::{push_sample, set_read_fail_count, set_state},
+    storage::ImuPipeline,
     types::{CaptureState, FifoConfig, ImuRawSample, ImuReport, Int1FifoStreamState},
 };
 
@@ -15,9 +15,9 @@ fn report_to_capture_state(report: ImuReport) -> CaptureState {
 }
 
 #[embassy_executor::task]
-pub async fn imu_capture_task(mut imu: Qmi8658<'static>) -> ! {
+pub async fn imu_capture_task(mut imu: Qmi8658<'static>, pipeline: &'static ImuPipeline) -> ! {
     if let Err(report) = imu.setup_int1_fifo_stream(FifoConfig::default()).await {
-        set_state(report_to_capture_state(report));
+        pipeline.set_state(report_to_capture_state(report));
 
         loop {
             Timer::after(Duration::from_secs(1)).await;
@@ -29,7 +29,7 @@ pub async fn imu_capture_task(mut imu: Qmi8658<'static>) -> ! {
         accel: [0; 3],
         gyro: [0; 3],
     }; 4];
-    set_state(CaptureState::Running);
+    pipeline.set_state(CaptureState::Running);
 
     loop {
         match imu
@@ -38,12 +38,12 @@ pub async fn imu_capture_task(mut imu: Qmi8658<'static>) -> ! {
         {
             Ok(n) => {
                 for sample in fifo_batch[..n].iter().copied() {
-                    push_sample(sample);
+                    pipeline.push_sample(sample);
                 }
-                set_read_fail_count(0);
+                pipeline.set_read_fail_count(0);
             }
             Err(ImuReport::ReadError(count)) => {
-                set_read_fail_count(count);
+                pipeline.set_read_fail_count(count);
             }
             Err(_) => {}
         }
