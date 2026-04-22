@@ -6,5 +6,11 @@ runner = "picotool load -u -v -x -t elf"
 [build]
 target = "thumbv8m.main-none-eabihf"
 
+[alias]
+fw-run = "run -p app --bin rp_touch --target thumbv8m.main-none-eabihf --release"
+fw-check = "check -p app --bin rp_touch --target thumbv8m.main-none-eabihf"
+sim-run = "run --manifest-path tools/rp_touch_sim/Cargo.toml --target x86_64-pc-windows-msvc"
+sim-check = "check --manifest-path tools/rp_touch_sim/Cargo.toml --target x86_64-pc-windows-msvc"
+
 [env]
 DEFMT_LOG = "debug"

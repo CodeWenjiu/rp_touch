@@ -1,0 +1,11 @@
+[package]
+name = "rp_touch_sim"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+slint = { version = "1.16.0", default-features = false, features = ["compat-1-2", "backend-winit", "renderer-software"] }
+
+[build-dependencies]
+slint-build = "1.16.0"
