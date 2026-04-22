@@ -19,6 +19,11 @@ qmi8658_driver = { path = "../crates/qmi8658_driver" }
 co5300_driver = { path = "../crates/co5300_driver" }
 board_alloc = { path = "../crates/board_alloc" }
 ft3168_driver = { path = "../crates/ft3168_driver" }
+slint_backend = { path = "../crates/slint_backend" }
+slint = { workspace = true }
+
+[build-dependencies]
+slint-build = { workspace = true }
 
 [[bin]]
 name = "rp_touch"

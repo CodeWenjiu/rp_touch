@@ -13,8 +13,8 @@ pub(crate) const CMD_WRHBMDISBV: u8 = 0x63;
 pub(crate) const CMD_SPI_MODE: u8 = 0xC4;
 pub(crate) const CMD_PAGE_SWITCH: u8 = 0xFE;
 
-pub(crate) const DMA_CHUNK_BYTES: usize = 4096;
-pub(crate) const DEFAULT_ROWS_PER_BURST: usize = 16;
+pub(crate) const DMA_CHUNK_BYTES: usize = 16_384;
+pub(crate) const DEFAULT_ROWS_PER_BURST: usize = 64;
 
 pub const MAX_STABLE_SCLK_HZ: u32 = 32_000_000;
 pub(crate) const BOARD_SCLK_HZ: u32 = MAX_STABLE_SCLK_HZ;

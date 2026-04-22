@@ -7,7 +7,7 @@ use core::{
 
 use embedded_alloc::LlffHeap as Heap;
 
-pub const HEAP_SIZE: usize = 2048;
+pub const HEAP_SIZE: usize = 128 * 1024;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();

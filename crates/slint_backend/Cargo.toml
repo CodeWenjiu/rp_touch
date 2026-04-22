@@ -1,0 +1,9 @@
+[package]
+name = "slint_backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+slint = { workspace = true }
+co5300_driver = { path = "../co5300_driver" }
+embassy-time = { workspace = true }

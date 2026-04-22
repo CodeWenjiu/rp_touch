@@ -1,0 +1,53 @@
+export component AppUi inherits Window {
+    width: 280px;
+    height: 456px;
+
+    in-out property <float> tilt_ratio: 0.5;
+    in-out property <bool> touch_active: false;
+
+    Rectangle {
+        background: #0055ff;
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: 42px;
+            background: #ffcc00;
+        }
+
+        Rectangle {
+            x: 16px;
+            y: 70px;
+            width: parent.width - 32px;
+            height: 26px;
+            background: #1a1a1a;
+        }
+
+        Rectangle {
+            x: 16px;
+            y: 70px;
+            width: (parent.width - 32px) * root.tilt_ratio;
+            height: 26px;
+            background: #00ff66;
+        }
+
+        Rectangle {
+            x: (parent.width / 2) - 36px;
+            y: 150px;
+            width: 72px;
+            height: 72px;
+            border-radius: 36px;
+            background: root.touch_active ? #ff2255 : #7f8c8d;
+        }
+
+        Rectangle {
+            x: 24px;
+            y: parent.height - 72px;
+            width: parent.width - 48px;
+            height: 40px;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+    }
+}

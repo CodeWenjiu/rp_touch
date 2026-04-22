@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+#[path = "rp_touch/slint_ui.rs"]
+mod slint_ui;
+
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_rp::{
@@ -13,8 +16,10 @@ use embassy_time::{Duration, Timer};
 use panic_probe as _;
 use static_cell::StaticCell;
 
-const IMU_REPORT_PERIOD_MS: u64 = 100;
+const IMU_REPORT_PERIOD_MS: u64 = 500;
 const SENSOR_WATCH_PERIOD_MS: u64 = 5;
+const UI_RENDER_PERIOD_MS: u64 = 33;
+const UI_DATA_REFRESH_MS: u64 = 33;
 
 // Program metadata for `picotool info`.
 #[unsafe(link_section = ".bi_entries")]
@@ -140,12 +145,6 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_rp::init(Default::default());
 
-    let mut display = co5300_driver::Co5300::new_default();
-    display.init_default().await;
-    let framebuffer = unsafe { &mut *core::ptr::addr_of_mut!(DISPLAY_FRAMEBUFFER) };
-    framebuffer.fill_rgb565(0x001F);
-    display.write_framebuffer(framebuffer).await;
-
     let mut i2c_cfg = i2c::Config::default();
     i2c_cfg.frequency = 400_000;
     i2c_cfg.sda_pullup = true;
@@ -172,7 +171,74 @@ async fn main(spawner: Spawner) {
     let class = usb_serial::init(spawner, p.USB, usb_serial::UsbSerialConfig::default());
     spawner.spawn(usb_telemetry_task(class, imu_pipeline, touch_pipeline).unwrap());
 
+    let mut display = co5300_driver::Co5300::new_default();
+    display.init_default().await;
+    let framebuffer = unsafe { &mut *core::ptr::addr_of_mut!(DISPLAY_FRAMEBUFFER) };
+    framebuffer.fill_rgb565(0x0000);
+
+    let mut backend = slint_backend::SlintBackend::init_default().ok();
+    let ui = if backend.is_some() {
+        slint_ui::create_app_ui().ok()
+    } else {
+        None
+    };
+
+    let ui_enabled = ui.is_some() && backend.is_some();
+    if ui_enabled {
+        if let (Some(ui_ref), Some(backend_ref)) = (ui.as_ref(), backend.as_mut()) {
+            ui_ref.set_tilt_ratio(0.5);
+            ui_ref.set_touch_active(false);
+            backend_ref.request_redraw();
+            let _ = backend_ref.render_if_needed(&mut display);
+        }
+    } else {
+        framebuffer.fill_rgb565(0x001F);
+        display.write_framebuffer(framebuffer).await;
+    }
+
+    let mut imu_ui_rx = IMU_WATCH.receiver().unwrap();
+    let mut touch_ui_rx = TOUCH_WATCH.receiver().unwrap();
+    let mut latest_imu = imu_ui_rx.try_get().unwrap_or_default();
+    let mut latest_touch = touch_ui_rx.try_get().unwrap_or_default();
+    let mut ui_dirty = true;
+    let mut ui_data_ticks = 0u32;
+
     loop {
-        Timer::after(Duration::from_secs(1)).await;
+        while let Some(frame) = imu_ui_rx.try_changed() {
+            latest_imu = frame;
+            ui_dirty = true;
+        }
+        while let Some(frame) = touch_ui_rx.try_changed() {
+            latest_touch = frame;
+            ui_dirty = true;
+        }
+
+        ui_data_ticks = ui_data_ticks.saturating_add(UI_RENDER_PERIOD_MS as u32);
+        if ui_data_ticks >= UI_DATA_REFRESH_MS as u32 {
+            ui_data_ticks = 0;
+            ui_dirty = true;
+        }
+
+        if ui_dirty {
+            if let Some(ui_ref) = ui.as_ref() {
+                let tilt = latest_imu.sample.tilt_deg_from_accel_8g();
+                let pitch = tilt.pitch_deg;
+                let ratio = ((pitch + 90.0) / 180.0).clamp(0.0, 1.0);
+                ui_ref.set_tilt_ratio(ratio);
+                ui_ref.set_touch_active(latest_touch.sample.is_some());
+            }
+            if let Some(backend_ref) = backend.as_ref() {
+                backend_ref.request_redraw();
+            }
+            ui_dirty = false;
+        }
+
+        if ui_enabled {
+            if let Some(backend_ref) = backend.as_mut() {
+                let _ = backend_ref.render_if_needed(&mut display);
+            }
+        }
+
+        Timer::after(Duration::from_millis(UI_RENDER_PERIOD_MS)).await;
     }
 }

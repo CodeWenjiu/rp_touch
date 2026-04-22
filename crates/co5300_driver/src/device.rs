@@ -30,6 +30,7 @@ struct PioTx<'d> {
     cfg_single: pio::Config<'d, peripherals::PIO0>,
     cfg_quad: pio::Config<'d, peripherals::PIO0>,
     mode: TxMode,
+    quad_dma_active: bool,
 }
 
 impl<'d> PioTx<'d> {
@@ -119,6 +120,7 @@ impl<'d> PioTx<'d> {
             cfg_single,
             cfg_quad,
             mode: TxMode::Single,
+            quad_dma_active: false,
         }
     }
 
@@ -144,7 +146,19 @@ impl<'d> PioTx<'d> {
         self.flush_tx();
     }
 
+    fn write_blocking(&mut self, mode: TxMode, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+
+        self.switch_mode(mode);
+        self.start_dma_bytes(bytes);
+        self.wait_dma_and_tx_done();
+    }
+
     fn switch_mode(&mut self, mode: TxMode) {
+        self.wait_dma_and_tx_done();
+
         if self.mode == mode {
             return;
         }
@@ -164,6 +178,51 @@ impl<'d> PioTx<'d> {
         while !self.sm.tx().empty() {}
         while !self.sm.tx().stalled() {}
     }
+
+    fn start_quad_dma(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+
+        self.switch_mode(TxMode::Quad);
+        self.start_dma_bytes(bytes);
+        self.quad_dma_active = true;
+    }
+
+    fn poll_quad_dma_complete(&mut self) -> bool {
+        if !self.quad_dma_active {
+            return true;
+        }
+        if self.dma_busy() {
+            return false;
+        }
+
+        self.flush_tx();
+        self.quad_dma_active = false;
+        true
+    }
+
+    fn wait_dma_and_tx_done(&mut self) {
+        while self.dma_busy() {}
+        self.flush_tx();
+    }
+
+    fn dma_busy(&self) -> bool {
+        self.dma.regs().ctrl_trig().read().busy()
+    }
+
+    fn start_dma_bytes(&mut self, bytes: &[u8]) {
+        unsafe {
+            // Keep transfer alive in hardware; completion is polled via DMA busy flag.
+            let transfer = self.dma.write(
+                bytes,
+                self.sm.tx_fifo_ptr() as *mut u8,
+                self.sm.tx_treq(),
+                false,
+            );
+            core::mem::forget(transfer);
+        }
+    }
 }
 
 pub struct Co5300<'d> {
@@ -171,6 +230,7 @@ pub struct Co5300<'d> {
     cs: Output<'d>,
     reset: Output<'d>,
     tuning: Co5300Tuning,
+    stripe_transfer_active: bool,
 }
 
 impl<'d> Co5300<'d> {
@@ -197,6 +257,7 @@ impl<'d> Co5300<'d> {
             cs,
             reset,
             tuning: Co5300Tuning::default(),
+            stripe_transfer_active: false,
         }
     }
 
@@ -273,6 +334,42 @@ impl<'d> Co5300<'d> {
         }
     }
 
+    pub async fn write_framebuffer_region(
+        &mut self,
+        framebuffer: &FrameBuffer,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) {
+        if width == 0 || height == 0 || x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
+            return;
+        }
+
+        let x0 = x;
+        let y0 = y;
+        let x1 = core::cmp::min(x.saturating_add(width), DISPLAY_WIDTH) - 1;
+        let y1 = core::cmp::min(y.saturating_add(height), DISPLAY_HEIGHT) - 1;
+
+        let full_row_bytes = DISPLAY_WIDTH * 2;
+        let region_row_bytes = (x1 - x0 + 1) * 2;
+        let fb_bytes = framebuffer.as_bytes();
+
+        for row in y0..=y1 {
+            self.set_address_window(x0 as u16, row as u16, x1 as u16, row as u16)
+                .await;
+
+            let start = row * full_row_bytes + x0 * 2;
+            let end = start + region_row_bytes;
+
+            self.cs.set_low();
+            let cmd_header = Self::qspi_flash_header(self.tuning.data_prefix, CMD_MEMORY_WRITE);
+            self.push_single(&cmd_header).await;
+            self.push_quad(&fb_bytes[start..end]).await;
+            self.cs.set_high();
+        }
+    }
+
     pub async fn refresh_loop(&mut self, framebuffer: &FrameBuffer, period: Duration) -> ! {
         loop {
             self.write_framebuffer(framebuffer).await;
@@ -298,6 +395,81 @@ impl<'d> Co5300<'d> {
         self.cs.set_high();
     }
 
+    pub fn set_address_window_blocking(&mut self, x0: u16, y0: u16, x1: u16, y1: u16) {
+        let x0p = x0.saturating_add(self.tuning.x_offset);
+        let x1p = x1.saturating_add(self.tuning.x_offset);
+        let y0p = y0.saturating_add(self.tuning.y_offset);
+        let y1p = y1.saturating_add(self.tuning.y_offset);
+
+        let col = [(x0p >> 8) as u8, x0p as u8, (x1p >> 8) as u8, x1p as u8];
+        let row = [(y0p >> 8) as u8, y0p as u8, (y1p >> 8) as u8, y1p as u8];
+
+        self.write_command_blocking(CMD_COLUMN_ADDR_SET, &col);
+        self.write_command_blocking(CMD_ROW_ADDR_SET, &row);
+    }
+
+    pub fn write_command_blocking(&mut self, command: u8, params: &[u8]) {
+        self.cs.set_low();
+        let cmd_header = Self::qspi_flash_header(self.tuning.cmd_prefix, command);
+        self.push_single_blocking(&cmd_header);
+
+        if !params.is_empty() {
+            self.push_single_blocking(params);
+        }
+
+        self.cs.set_high();
+    }
+
+    pub fn begin_fullwidth_stripe_transfer(&mut self, y_start: usize, rows: usize, pixels: &[u16]) {
+        if rows == 0 || y_start >= DISPLAY_HEIGHT || self.stripe_transfer_active {
+            return;
+        }
+
+        let clamped_rows = core::cmp::min(rows, DISPLAY_HEIGHT - y_start);
+        let expected_words = DISPLAY_WIDTH * clamped_rows;
+        if pixels.len() < expected_words {
+            return;
+        }
+
+        self.set_address_window_blocking(
+            0,
+            y_start as u16,
+            (DISPLAY_WIDTH - 1) as u16,
+            (y_start + clamped_rows - 1) as u16,
+        );
+
+        self.cs.set_low();
+        let cmd_header = Self::qspi_flash_header(self.tuning.data_prefix, CMD_MEMORY_WRITE);
+        self.push_single_blocking(&cmd_header);
+
+        let payload = unsafe {
+            core::slice::from_raw_parts(
+                pixels.as_ptr() as *const u8,
+                expected_words * core::mem::size_of::<u16>(),
+            )
+        };
+        self.push_quad_dma_start(payload);
+        self.stripe_transfer_active = true;
+    }
+
+    pub fn poll_fullwidth_stripe_transfer_done(&mut self) -> bool {
+        if !self.stripe_transfer_active {
+            return true;
+        }
+
+        if !self.tx.poll_quad_dma_complete() {
+            return false;
+        }
+
+        self.cs.set_high();
+        self.stripe_transfer_active = false;
+        true
+    }
+
+    pub fn wait_fullwidth_stripe_transfer_done(&mut self) {
+        while !self.poll_fullwidth_stripe_transfer_done() {}
+    }
+
     #[inline]
     fn qspi_flash_header(opcode: u8, reg: u8) -> [u8; 4] {
         [opcode, 0x00, reg, 0x00]
@@ -309,6 +481,14 @@ impl<'d> Co5300<'d> {
 
     async fn push_quad(&mut self, bytes: &[u8]) {
         self.tx.write_quad(bytes).await;
+    }
+
+    fn push_single_blocking(&mut self, bytes: &[u8]) {
+        self.tx.write_blocking(TxMode::Single, bytes);
+    }
+
+    fn push_quad_dma_start(&mut self, bytes: &[u8]) {
+        self.tx.start_quad_dma(bytes);
     }
 }
 

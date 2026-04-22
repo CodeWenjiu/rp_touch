@@ -14,6 +14,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
+    slint_build::compile("ui/rp_touch.slint").expect("failed to compile Slint UI");
+
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
     let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -28,6 +30,7 @@ fn main() {
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
+    println!("cargo:rerun-if-changed=ui/rp_touch.slint");
 
     println!("cargo:rustc-link-arg-bins=--nmagic");
     println!("cargo:rustc-link-arg-bins=-Tlink.x");
