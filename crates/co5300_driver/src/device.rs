@@ -201,8 +201,12 @@ impl<'d> PioTx<'d> {
     }
 
     fn flush_tx(&mut self) {
-        while !self.sm.tx().empty() {}
-        while !self.sm.tx().stalled() {}
+        while !self.sm.tx().empty() {
+            core::hint::spin_loop();
+        }
+        while !self.sm.tx().stalled() {
+            core::hint::spin_loop();
+        }
     }
 
     fn start_quad_dma(&mut self, bytes: &[u8]) {
@@ -229,7 +233,9 @@ impl<'d> PioTx<'d> {
     }
 
     fn wait_dma_and_tx_done(&mut self) {
-        while self.dma_busy() {}
+        while self.dma_busy() {
+            core::hint::spin_loop();
+        }
         self.flush_tx();
     }
 
@@ -452,20 +458,37 @@ impl<'d> Co5300<'d> {
     }
 
     pub fn begin_fullwidth_stripe_transfer(&mut self, y_start: usize, rows: usize, pixels: &[u16]) {
-        if rows == 0 || y_start >= DISPLAY_HEIGHT || self.stripe_transfer_active {
+        self.begin_region_transfer(0, y_start, DISPLAY_WIDTH, rows, pixels);
+    }
+
+    pub fn begin_region_transfer(
+        &mut self,
+        x_start: usize,
+        y_start: usize,
+        width: usize,
+        rows: usize,
+        pixels: &[u16],
+    ) {
+        if width == 0
+            || rows == 0
+            || x_start >= DISPLAY_WIDTH
+            || y_start >= DISPLAY_HEIGHT
+            || self.stripe_transfer_active
+        {
             return;
         }
 
+        let clamped_width = core::cmp::min(width, DISPLAY_WIDTH - x_start);
         let clamped_rows = core::cmp::min(rows, DISPLAY_HEIGHT - y_start);
-        let expected_words = DISPLAY_WIDTH * clamped_rows;
+        let expected_words = clamped_width * clamped_rows;
         if pixels.len() < expected_words {
             return;
         }
 
         self.set_address_window_blocking(
-            0,
+            x_start as u16,
             y_start as u16,
-            (DISPLAY_WIDTH - 1) as u16,
+            (x_start + clamped_width - 1) as u16,
             (y_start + clamped_rows - 1) as u16,
         );
 
@@ -498,7 +521,9 @@ impl<'d> Co5300<'d> {
     }
 
     pub fn wait_fullwidth_stripe_transfer_done(&mut self) {
-        while !self.poll_fullwidth_stripe_transfer_done() {}
+        while !self.poll_fullwidth_stripe_transfer_done() {
+            core::hint::spin_loop();
+        }
     }
 
     #[inline]

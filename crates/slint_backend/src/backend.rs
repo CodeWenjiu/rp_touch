@@ -49,8 +49,9 @@ impl SlintBackend {
         let mut rendered = false;
         let pipeline = new_pipeline(display);
         self.window.draw_if_needed(|renderer| {
-            renderer.render_by_line(pipeline);
-            rendered = true;
+            let dirty = renderer.render_by_line(pipeline);
+            let bb = dirty.bounding_box_size();
+            rendered = bb.width > 0 && bb.height > 0;
         });
 
         rendered

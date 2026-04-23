@@ -8,6 +8,10 @@ export component AppUi inherits Window {
 
     in-out property <float> tilt_ratio: 0.5;
     in-out property <int> ui_seconds: 0;
+    in-out property <int> ui_fps: 0;
+    in-out property <bool> ui_touch_active: false;
+    in-out property <int> ui_touch_x: 0;
+    in-out property <int> ui_touch_y: 0;
     in-out property <int> active_page: 0;
 
     ui_timer := Timer {
@@ -59,6 +63,38 @@ export component AppUi inherits Window {
             back => {
                 root.active_page = 0;
             }
+        }
+
+        Text {
+            x: parent.width - 80px;
+            y: 4px;
+            width: 72px;
+            text: root.ui_fps + "fps";
+            color: #9cb3df;
+            font-size: 12px;
+            horizontal-alignment: right;
+        }
+
+        Rectangle {
+            visible: root.ui_touch_active;
+            width: 28px;
+            height: 28px;
+            x: root.ui_touch_x * 1px - (self.width / 2);
+            y: root.ui_touch_y * 1px - (self.height / 2);
+            border-radius: 14px;
+            border-width: 2px;
+            border-color: #8fd7ff;
+            background: #ffffff33;
+        }
+
+        Rectangle {
+            visible: root.ui_touch_active;
+            width: 8px;
+            height: 8px;
+            x: root.ui_touch_x * 1px - (self.width / 2);
+            y: root.ui_touch_y * 1px - (self.height / 2);
+            border-radius: 4px;
+            background: #8fd7ff;
         }
     }
 }
