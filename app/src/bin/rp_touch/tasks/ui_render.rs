@@ -1,6 +1,6 @@
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Instant};
 
-use crate::shared::{IMU_WATCH, TOUCH_WATCH, UI_RENDER_PERIOD_MS, UI_STATE_WATCH, UiRenderState};
+use crate::shared::{IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState};
 use crate::slint_ui;
 
 const TILT_REDRAW_EPS: f32 = 0.002;
@@ -53,12 +53,12 @@ pub async fn ui_render_task() {
 
     loop {
         let mut imu_updated = false;
-        while let Some(frame) = imu_ui_rx.try_changed() {
+        if let Some(frame) = imu_ui_rx.try_changed() {
             latest_imu = frame;
             imu_updated = true;
         }
 
-        while let Some(frame) = touch_ui_rx.try_changed() {
+        if let Some(frame) = touch_ui_rx.try_changed() {
             let _ = backend.inject_touch_sample(touch_sample_to_xy(frame.sample));
             match frame.sample {
                 Some(point) => {
@@ -115,7 +115,5 @@ pub async fn ui_render_task() {
             rendered_frame_count = 0;
             fps_window_start = now;
         }
-
-        Timer::after(Duration::from_millis(UI_RENDER_PERIOD_MS)).await;
     }
 }
