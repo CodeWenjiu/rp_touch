@@ -44,7 +44,7 @@ impl TouchPipeline {
         }
     }
 
-    pub(crate) fn set_state(&self, state: CaptureState) {
+    pub fn set_state(&self, state: CaptureState) {
         match state {
             CaptureState::Starting => self.state.store(STATE_STARTING, Ordering::Relaxed),
             CaptureState::Running => self.state.store(STATE_RUNNING, Ordering::Relaxed),
@@ -52,11 +52,11 @@ impl TouchPipeline {
         }
     }
 
-    pub(crate) fn set_chip_id(&self, chip_id: u8) {
+    pub fn set_chip_id(&self, chip_id: u8) {
         self.chip_id.store(chip_id, Ordering::Relaxed);
     }
 
-    pub(crate) fn push_sample(&self, sample: TouchSample) {
+    pub fn push_sample(&self, sample: TouchSample) {
         match sample {
             Some(p) => {
                 self.latest_x.store(p.x as u32, Ordering::Relaxed);

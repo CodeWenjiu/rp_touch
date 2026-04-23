@@ -53,7 +53,7 @@ impl ImuPipeline {
         CaptureStats { state }
     }
 
-    pub(crate) fn set_state(&self, state: CaptureState) {
+    pub fn set_state(&self, state: CaptureState) {
         match state {
             CaptureState::Starting => self.state.store(STATE_STARTING, Ordering::Relaxed),
             CaptureState::Running => self.state.store(STATE_RUNNING, Ordering::Relaxed),
@@ -68,7 +68,7 @@ impl ImuPipeline {
         }
     }
 
-    pub(crate) fn push_sample(&self, sample: ImuRawSample) {
+    pub fn push_sample(&self, sample: ImuRawSample) {
         self.accel_x
             .store(sample.accel[0] as i32, Ordering::Relaxed);
         self.accel_y

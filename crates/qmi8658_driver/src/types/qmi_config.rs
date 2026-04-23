@@ -7,6 +7,7 @@ use crate::regs::QMI8658_I2C_ADDR;
 pub enum Error {
     I2c(i2c::Error),
     SharedI2c(I2cDeviceError<i2c::Error>),
+    Timeout,
     InvalidAddress(u8),
     InvalidChipId(u8),
     RegisterVerify { reg: u8, expected: u8, actual: u8 },

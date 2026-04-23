@@ -6,6 +6,7 @@ pub enum Error {
     InvalidAddress(u8),
     I2c(i2c::Error),
     SharedI2c(I2cDeviceError<i2c::Error>),
+    Timeout,
 }
 
 impl From<i2c::Error> for Error {
