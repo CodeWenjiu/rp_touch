@@ -13,6 +13,7 @@ use core::ptr::addr_of_mut;
 use embassy_executor::{Executor, Spawner};
 use embassy_rp::{
     bind_interrupts,
+    clocks::ClockConfig,
     i2c::{self, Async, I2c},
     multicore::Stack,
     peripherals,
@@ -53,7 +54,9 @@ bind_interrupts!(struct I2cIrqs {
 async fn main(spawner: Spawner) {
     board_alloc::init();
 
-    let p = embassy_rp::init(Default::default());
+    let p = embassy_rp::init(embassy_rp::config::Config::new(
+        ClockConfig::system_freq(160_000_000).expect("failed to set system clock to 160MHz"),
+    ));
 
     // Core1: UI state update + Slint render + display DMA.
     embassy_rp::multicore::spawn_core1(
