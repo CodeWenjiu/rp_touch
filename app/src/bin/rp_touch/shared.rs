@@ -12,3 +12,13 @@ pub(crate) static IMU_WATCH: Watch<CriticalSectionRawMutex, qmi8658_driver::ImuF
     Watch::new();
 pub(crate) static TOUCH_WATCH: Watch<CriticalSectionRawMutex, ft3168_driver::TouchFrame, 4> =
     Watch::new();
+pub(crate) static UI_STATE_WATCH: Watch<CriticalSectionRawMutex, UiRenderState, 4> = Watch::new();
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum UiRenderState {
+    #[default]
+    Starting,
+    Running,
+    InitFailedBackend,
+    InitFailedUi,
+}
