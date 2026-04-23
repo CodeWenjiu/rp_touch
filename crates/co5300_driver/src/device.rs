@@ -1,5 +1,7 @@
 use embassy_rp::{
-    Peri, bind_interrupts, dma,
+    Peri, bind_interrupts,
+    clocks::clk_sys_freq,
+    dma,
     gpio::{Drive, Level, Output, SlewRate},
     peripherals,
     pio::{self, Direction, FifoJoin, Pio, ShiftDirection, StateMachine},
@@ -34,7 +36,14 @@ struct PioTx<'d> {
 }
 
 impl<'d> PioTx<'d> {
+    fn effective_serial_hz(requested_hz: u32) -> u32 {
+        let capped_by_board = requested_hz.max(1).min(MAX_STABLE_SCLK_HZ);
+        let capped_by_pio = clk_sys_freq().saturating_div(2).max(1);
+        capped_by_board.min(capped_by_pio)
+    }
+
     fn new(
+        serial_hz: u32,
         pio: Peri<'d, peripherals::PIO0>,
         dma_ch: Peri<'d, peripherals::DMA_CH0>,
         clk: Peri<'d, peripherals::PIN_10>,
@@ -43,6 +52,7 @@ impl<'d> PioTx<'d> {
         sio2: Peri<'d, peripherals::PIN_13>,
         sio3: Peri<'d, peripherals::PIN_14>,
     ) -> Self {
+        let serial_hz = Self::effective_serial_hz(serial_hz);
         let mut pio = Pio::new(pio, Irqs);
         let dma = dma::Channel::new(dma_ch, Irqs);
 
@@ -96,7 +106,6 @@ impl<'d> PioTx<'d> {
         cfg_quad.shift_out.threshold = 8;
         cfg_quad.fifo_join = FifoJoin::TxOnly;
 
-        let serial_hz = BOARD_SCLK_HZ.min(MAX_STABLE_SCLK_HZ);
         let divider = calculate_pio_clock_divider(serial_hz.saturating_mul(2));
         cfg_single.clock_divider = divider;
         cfg_quad.clock_divider = divider;
@@ -174,6 +183,23 @@ impl<'d> PioTx<'d> {
         self.mode = mode;
     }
 
+    fn set_serial_hz(&mut self, serial_hz: u32) {
+        let serial_hz = Self::effective_serial_hz(serial_hz);
+        let divider = calculate_pio_clock_divider(serial_hz.saturating_mul(2));
+        self.cfg_single.clock_divider = divider;
+        self.cfg_quad.clock_divider = divider;
+
+        self.wait_dma_and_tx_done();
+        self.sm.set_enable(false);
+        match self.mode {
+            TxMode::Single => self.sm.set_config(&self.cfg_single),
+            TxMode::Quad => self.sm.set_config(&self.cfg_quad),
+        }
+        self.sm.clear_fifos();
+        self.sm.restart();
+        self.sm.set_enable(true);
+    }
+
     fn flush_tx(&mut self) {
         while !self.sm.tx().empty() {}
         while !self.sm.tx().stalled() {}
@@ -245,7 +271,8 @@ impl<'d> Co5300<'d> {
         sio3: Peri<'d, peripherals::PIN_14>,
         reset: Peri<'d, peripherals::PIN_15>,
     ) -> Self {
-        let tx = PioTx::new(pio, dma_ch, clk, sio0, sio1, sio2, sio3);
+        let tuning = Co5300Tuning::default();
+        let tx = PioTx::new(tuning.sclk_hz, pio, dma_ch, clk, sio0, sio1, sio2, sio3);
 
         let mut cs = Output::new(cs, Level::High);
         cs.set_high();
@@ -256,12 +283,13 @@ impl<'d> Co5300<'d> {
             tx,
             cs,
             reset,
-            tuning: Co5300Tuning::default(),
+            tuning,
             stripe_transfer_active: false,
         }
     }
 
     pub fn set_tuning(&mut self, tuning: Co5300Tuning) {
+        self.tx.set_serial_hz(tuning.sclk_hz);
         self.tuning = tuning;
     }
 
@@ -277,6 +305,8 @@ impl<'d> Co5300<'d> {
     }
 
     pub async fn init_default(&mut self) {
+        // Keep command-phase timing conservative, then switch back to the runtime bus rate.
+        self.tx.set_serial_hz(BOARD_INIT_SCLK_HZ);
         self.hard_reset().await;
         self.write_command(CMD_SW_RESET, &[]).await;
         Timer::after(Duration::from_millis(10)).await;
@@ -296,6 +326,7 @@ impl<'d> Co5300<'d> {
         Timer::after(Duration::from_millis(BOARD_DISPLAY_ON_WAIT_MS)).await;
         self.write_command(CMD_WRITE_BRIGHTNESS, &[0xFF]).await;
         self.write_command(CMD_HIGH_CONTRAST_MODE, &[0x00]).await;
+        self.tx.set_serial_hz(self.tuning.sclk_hz);
     }
 
     pub async fn set_address_window(&mut self, x0: u16, y0: u16, x1: u16, y1: u16) {
