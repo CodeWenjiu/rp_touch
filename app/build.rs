@@ -14,7 +14,11 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
-    slint_build::compile("ui/rp_touch.slint").expect("failed to compile Slint UI");
+    let config = slint_build::CompilerConfiguration::new()
+        .embed_resources(slint_build::EmbedResourcesKind::EmbedForSoftwareRenderer)
+        .with_scale_factor(1.0);
+    slint_build::compile_with_config("ui/rp_touch.slint", config)
+        .expect("failed to compile Slint UI");
 
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.

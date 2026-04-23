@@ -3,41 +3,172 @@ export component AppUi inherits Window {
     height: 456px;
 
     in-out property <float> tilt_ratio: 0.5;
+    property <color> tilt_color: root.tilt_ratio > 0.66 ? #ff7a4f : (root.tilt_ratio < 0.34 ? #4aa1ff : #2ec18f);
+    property <string> tilt_state: root.tilt_ratio > 0.66 ? "UP" : (root.tilt_ratio < 0.34 ? "DOWN" : "LEVEL");
 
     Rectangle {
-        background: #0055ff;
+        background: #f2f6ff;
 
         Rectangle {
             x: 0px;
             y: 0px;
             width: parent.width;
-            height: 42px;
-            background: #ffcc00;
+            height: 152px;
+            background: #1f6ef3;
         }
 
         Rectangle {
-            x: 16px;
-            y: 70px;
-            width: parent.width - 32px;
-            height: 26px;
-            background: #1a1a1a;
+            x: parent.width - 106px;
+            y: -20px;
+            width: 136px;
+            height: 136px;
+            border-radius: 68px;
+            background: #70d6ff;
         }
 
         Rectangle {
-            x: 16px;
-            y: 70px;
-            width: (parent.width - 32px) * root.tilt_ratio;
-            height: 26px;
-            background: #00ff66;
+            x: -46px;
+            y: 52px;
+            width: 116px;
+            height: 116px;
+            border-radius: 58px;
+            background: #4c90ff;
+        }
+
+        Text {
+            x: 20px;
+            y: 16px;
+            text: "RP Touch";
+            color: #ffffff;
+            font-size: 26px;
         }
 
         Rectangle {
-            x: 24px;
-            y: parent.height - 72px;
-            width: parent.width - 48px;
-            height: 40px;
-            border-radius: 8px;
+            x: 14px;
+            y: 104px;
+            width: parent.width - 28px;
+            height: 188px;
+            border-radius: 16px;
             background: #ffffff;
+            border-width: 1px;
+            border-color: #d6e0f5;
+
+            Text {
+                x: 16px;
+                y: 14px;
+                text: "TILT";
+                color: #4f6388;
+                font-size: 13px;
+            }
+
+            Rectangle {
+                x: parent.width - 94px;
+                y: 10px;
+                width: 78px;
+                height: 28px;
+                border-radius: 14px;
+                background: root.tilt_color;
+            }
+
+            Text {
+                x: parent.width - 94px;
+                y: 16px;
+                width: 78px;
+                text: root.tilt_state;
+                color: #ffffff;
+                font-size: 13px;
+                horizontal-alignment: center;
+            }
+
+            tilt_track := Rectangle {
+                x: 16px;
+                y: 58px;
+                width: parent.width - 32px;
+                height: 34px;
+                border-radius: 17px;
+                background: #eaf0ff;
+                border-width: 1px;
+                border-color: #d6e2ff;
+                clip: true;
+
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width * root.tilt_ratio;
+                    height: parent.height;
+                    border-radius: 17px;
+                    background: root.tilt_color;
+                }
+            }
+
+            Rectangle {
+                width: 18px;
+                height: tilt_track.height + 14px;
+                x: tilt_track.x + (tilt_track.width - self.width) * root.tilt_ratio;
+                y: tilt_track.y - 7px;
+                border-radius: 9px;
+                background: #ffffff;
+                border-width: 2px;
+                border-color: #2d5fce;
+            }
+
+            Text {
+                x: 16px;
+                y: 110px;
+                width: parent.width - 32px;
+                text: root.tilt_state;
+                color: #3b5480;
+                font-size: 30px;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                x: 16px;
+                y: 150px;
+                width: parent.width - 32px;
+                text: "Keep marker near center";
+                color: #5f769e;
+                font-size: 12px;
+                horizontal-alignment: center;
+            }
+        }
+
+        Rectangle {
+            x: 14px;
+            y: parent.height - 124px;
+            width: parent.width - 28px;
+            height: 102px;
+            border-radius: 16px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #d6e0f5;
+
+            Rectangle {
+                x: 18px;
+                y: 18px;
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
+                background: screen_touch.pressed ? #2cc090 : #2f76f6;
+            }
+
+            Text {
+                x: 64px;
+                y: 24px;
+                width: parent.width - 80px;
+                text: screen_touch.pressed ? "Touch Active" : "Touch Ready";
+                color: #3f5984;
+                font-size: 17px;
+            }
+
+            Text {
+                x: 64px;
+                y: 52px;
+                width: parent.width - 88px;
+                text: screen_touch.pressed ? "Release to reset" : "Tap screen";
+                color: #637ca5;
+                font-size: 12px;
+            }
         }
 
         screen_touch := TouchArea {
@@ -49,12 +180,24 @@ export component AppUi inherits Window {
 
         Rectangle {
             visible: screen_touch.pressed;
-            width: 20px;
-            height: 20px;
+            width: 34px;
+            height: 34px;
             x: screen_touch.mouse-x - (self.width / 2);
             y: screen_touch.mouse-y - (self.height / 2);
-            border-radius: 10px;
-            background: #ff00aa;
+            border-radius: 17px;
+            border-width: 3px;
+            border-color: root.tilt_color;
+            background: #ffffff;
+        }
+
+        Rectangle {
+            visible: screen_touch.pressed;
+            width: 10px;
+            height: 10px;
+            x: screen_touch.mouse-x - (self.width / 2);
+            y: screen_touch.mouse-y - (self.height / 2);
+            border-radius: 5px;
+            background: root.tilt_color;
         }
     }
 }
