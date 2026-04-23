@@ -1,0 +1,108 @@
+import { AppIconTile } from "widgets.slint";
+
+export component HomeView inherits Rectangle {
+    in property <float> tilt_ratio: 0.5;
+    in property <int> ui_seconds: 0;
+    callback open_imu();
+    callback open_timer();
+
+    property <int> tilt_zone: root.tilt_ratio > 0.66 ? 2 : (root.tilt_ratio < 0.34 ? 0 : 1);
+    property <string> tilt_state: root.tilt_zone == 2 ? "UP" : (root.tilt_zone == 0 ? "DOWN" : "LEVEL");
+    property <color> tilt_color: root.tilt_zone == 2 ? #ff8b59 : (root.tilt_zone == 0 ? #5ca8ff : #30c897);
+    property <length> tile_width: (self.width - 56px) / 2;
+
+    background: #0b1324;
+    border-radius: 30px;
+
+    Rectangle {
+        x: 16px;
+        y: 16px;
+        width: parent.width - 32px;
+        height: 192px;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: #2b3652;
+        background: #121d33;
+
+        Text {
+            x: 18px;
+            y: 16px;
+            text: "RP WATCH";
+            color: #8ca4d8;
+            font-size: 14px;
+        }
+
+        Text {
+            x: 18px;
+            y: 54px;
+            width: parent.width - 36px;
+            text: (root.ui_seconds / 60) + "m " + Math.mod(root.ui_seconds, 60) + "s";
+            color: #f6f9ff;
+            font-size: 42px;
+        }
+
+        Rectangle {
+            x: 18px;
+            y: 132px;
+            width: 126px;
+            height: 40px;
+            border-radius: 20px;
+            background: root.tilt_color;
+            Text {
+                x: 0px;
+                y: 9px;
+                width: parent.width;
+                text: "IMU " + root.tilt_state;
+                color: #ffffff;
+                font-size: 15px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    Text {
+        x: 20px;
+        y: 224px;
+        text: "APPS";
+        color: #89a0d1;
+        font-size: 14px;
+    }
+
+    AppIconTile {
+        x: 20px;
+        y: 248px;
+        width: root.tile_width;
+        height: 140px;
+        title: "IMU";
+        subtitle: "Tilt monitor";
+        icon_text: "I";
+        accent: root.tilt_color;
+        tapped => {
+            root.open_imu();
+        }
+    }
+
+    AppIconTile {
+        x: 32px + root.tile_width;
+        y: 248px;
+        width: root.tile_width;
+        height: 140px;
+        title: "Timer";
+        subtitle: "System clock";
+        icon_text: "T";
+        accent: #66a6ff;
+        tapped => {
+            root.open_timer();
+        }
+    }
+
+    Text {
+        x: 20px;
+        y: 402px;
+        width: parent.width - 40px;
+        text: "Tap an icon to enter app";
+        color: #7289b7;
+        font-size: 13px;
+        horizontal-alignment: center;
+    }
+}

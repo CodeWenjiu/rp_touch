@@ -55,7 +55,7 @@ async fn main(spawner: Spawner) {
     board_alloc::init();
 
     let p = embassy_rp::init(embassy_rp::config::Config::new(
-        ClockConfig::system_freq(160_000_000).expect("failed to set system clock to 160MHz"),
+        ClockConfig::system_freq(280_000_000).expect("failed to set system clock to 160MHz"),
     ));
 
     // Core1: UI state update + Slint render + display DMA.

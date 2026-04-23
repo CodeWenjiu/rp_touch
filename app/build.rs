@@ -34,7 +34,7 @@ fn main() {
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
-    println!("cargo:rerun-if-changed=ui/rp_touch.slint");
+    println!("cargo:rerun-if-changed=ui");
 
     println!("cargo:rustc-link-arg-bins=--nmagic");
     println!("cargo:rustc-link-arg-bins=-Tlink.x");
