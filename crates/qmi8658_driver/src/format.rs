@@ -17,8 +17,8 @@ pub fn format_report_line(report: ImuReport) -> heapless::String<64> {
                 sample.gyro[2]
             );
         }
-        ImuReport::ReadError(count) => {
-            let _ = write!(line, "IMU_ERR,read_fail_count={}\r\n", count);
+        ImuReport::ReadError => {
+            let _ = line.push_str("IMU_ERR,read_failed\r\n");
         }
         ImuReport::InitError => {
             let _ = line.push_str("IMU_ERR,init_failed\r\n");

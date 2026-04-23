@@ -15,7 +15,7 @@ pub use regs::{
     QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_DATA, QMI8658_REG_FIFO_SMPL_CNT,
     QMI8658_REG_FIFO_STATUS, QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_STATUSINT, QMI8658_REG_WHO_AM_I,
 };
-pub use storage::{IMU_FRAME_QUEUE_CAPACITY, ImuPipeline, ImuReader};
+pub use storage::{ImuPipeline, ImuReader};
 pub use task::imu_capture_task;
 pub use types::{
     CaptureState, CaptureStats, Error, FifoConfig, FifoMode, FifoSize, ImuFrame, ImuRawSample,

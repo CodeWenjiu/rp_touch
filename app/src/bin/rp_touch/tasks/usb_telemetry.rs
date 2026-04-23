@@ -47,17 +47,11 @@ pub async fn usb_telemetry_task(
 
                 let _ = usb_serial::usb_println!(
                     serial,
-                    "{},touch={:?},imu_state={:?},imu_seq={},imu_fail={},imu_drop={},touch_state={:?},touch_seq={},touch_fail={},touch_drop={},touch_chip=0x{:02X}",
+                    "{},touch={:?},imu_state={:?},touch_state={:?},touch_chip=0x{:02X}",
                     tilt,
                     latest_touch.sample,
                     imu_stats.state,
-                    imu_stats.latest_seq,
-                    imu_stats.read_fail_count,
-                    imu_stats.dropped_samples,
                     touch_stats.state,
-                    touch_stats.latest_seq,
-                    touch_stats.read_fail_count,
-                    touch_stats.dropped_frames,
                     touch_stats.chip_id
                 );
             }

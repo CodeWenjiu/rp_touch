@@ -1,12 +1,8 @@
-use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-
-use crate::types::{CaptureState, CaptureStats, ImuFrame, ImuRawSample};
+use crate::types::{CaptureState, CaptureStats, ImuRawSample};
 
 mod reader;
-
-pub const IMU_FRAME_QUEUE_CAPACITY: usize = 128;
 
 const STATE_STARTING: u8 = 0;
 const STATE_RUNNING: u8 = 1;
@@ -15,37 +11,32 @@ const STATE_INVALID_CHIP_ID: u8 = 3;
 const STATE_FIFO_CONFIG_FAILED: u8 = 4;
 
 pub struct ImuPipeline {
-    channel: Channel<NoopRawMutex, ImuFrame, IMU_FRAME_QUEUE_CAPACITY>,
     state: AtomicU8,
     invalid_chip_id: AtomicU8,
-    pushed_samples: AtomicU32,
-    popped_samples: AtomicU32,
-    dropped_samples: AtomicU32,
-    read_fail_count: AtomicU32,
-    latest_seq: AtomicU32,
-    next_seq: AtomicU32,
+    accel_x: AtomicI32,
+    accel_y: AtomicI32,
+    accel_z: AtomicI32,
+    gyro_x: AtomicI32,
+    gyro_y: AtomicI32,
+    gyro_z: AtomicI32,
 }
 
 impl ImuPipeline {
     pub const fn new() -> Self {
         Self {
-            channel: Channel::new(),
             state: AtomicU8::new(STATE_STARTING),
             invalid_chip_id: AtomicU8::new(0),
-            pushed_samples: AtomicU32::new(0),
-            popped_samples: AtomicU32::new(0),
-            dropped_samples: AtomicU32::new(0),
-            read_fail_count: AtomicU32::new(0),
-            latest_seq: AtomicU32::new(0),
-            next_seq: AtomicU32::new(1),
+            accel_x: AtomicI32::new(0),
+            accel_y: AtomicI32::new(0),
+            accel_z: AtomicI32::new(0),
+            gyro_x: AtomicI32::new(0),
+            gyro_y: AtomicI32::new(0),
+            gyro_z: AtomicI32::new(0),
         }
     }
 
     pub fn reader(&self) -> ImuReader<'_> {
-        ImuReader {
-            pipeline: self,
-            latest: ImuFrame::default(),
-        }
+        ImuReader { pipeline: self }
     }
 
     pub fn capture_stats(&self) -> CaptureStats {
@@ -59,14 +50,7 @@ impl ImuPipeline {
             _ => CaptureState::Starting,
         };
 
-        CaptureStats {
-            state,
-            pushed_samples: self.pushed_samples.load(Ordering::Relaxed),
-            popped_samples: self.popped_samples.load(Ordering::Relaxed),
-            dropped_samples: self.dropped_samples.load(Ordering::Relaxed),
-            read_fail_count: self.read_fail_count.load(Ordering::Relaxed),
-            latest_seq: self.latest_seq.load(Ordering::Relaxed),
-        }
+        CaptureStats { state }
     }
 
     pub(crate) fn set_state(&self, state: CaptureState) {
@@ -85,19 +69,30 @@ impl ImuPipeline {
     }
 
     pub(crate) fn push_sample(&self, sample: ImuRawSample) {
-        let seq = self.next_seq.fetch_add(1, Ordering::Relaxed);
-        let frame = ImuFrame { seq, sample };
-
-        if self.channel.try_send(frame).is_err() {
-            self.dropped_samples.fetch_add(1, Ordering::Relaxed);
-        }
-
-        self.pushed_samples.fetch_add(1, Ordering::Relaxed);
-        self.latest_seq.store(seq, Ordering::Relaxed);
+        self.accel_x
+            .store(sample.accel[0] as i32, Ordering::Relaxed);
+        self.accel_y
+            .store(sample.accel[1] as i32, Ordering::Relaxed);
+        self.accel_z
+            .store(sample.accel[2] as i32, Ordering::Relaxed);
+        self.gyro_x.store(sample.gyro[0] as i32, Ordering::Relaxed);
+        self.gyro_y.store(sample.gyro[1] as i32, Ordering::Relaxed);
+        self.gyro_z.store(sample.gyro[2] as i32, Ordering::Relaxed);
     }
 
-    pub(crate) fn set_read_fail_count(&self, count: u32) {
-        self.read_fail_count.store(count, Ordering::Relaxed);
+    pub(crate) fn latest_sample(&self) -> ImuRawSample {
+        ImuRawSample {
+            accel: [
+                self.accel_x.load(Ordering::Relaxed) as i16,
+                self.accel_y.load(Ordering::Relaxed) as i16,
+                self.accel_z.load(Ordering::Relaxed) as i16,
+            ],
+            gyro: [
+                self.gyro_x.load(Ordering::Relaxed) as i16,
+                self.gyro_y.load(Ordering::Relaxed) as i16,
+                self.gyro_z.load(Ordering::Relaxed) as i16,
+            ],
+        }
     }
 }
 
@@ -109,5 +104,4 @@ impl Default for ImuPipeline {
 
 pub struct ImuReader<'a> {
     pipeline: &'a ImuPipeline,
-    latest: ImuFrame,
 }

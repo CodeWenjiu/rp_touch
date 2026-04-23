@@ -24,17 +24,12 @@ pub async fn touch_capture_task(mut touch: Ft3168<'static>, pipeline: &'static T
         }
     }
 
-    let mut fail_count = 0u32;
     loop {
         match touch.read_touch_sample().await {
             Ok(sample) => {
-                fail_count = 0;
-                pipeline.set_read_fail_count(0);
                 pipeline.push_sample(sample);
             }
             Err(_) => {
-                fail_count = fail_count.saturating_add(1);
-                pipeline.set_read_fail_count(fail_count);
                 pipeline.push_sample(TouchSample::default());
             }
         }

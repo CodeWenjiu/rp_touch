@@ -55,41 +55,28 @@ impl<'d> Qmi8658<'d> {
 
     pub async fn poll_int1_fifo_report(
         &mut self,
-        state: &mut Int1FifoStreamState,
+        _state: &mut Int1FifoStreamState,
         fifo_batch: &mut [ImuRawSample],
     ) -> Result<usize, ImuReport> {
         let mut pending_words = match self.fifo_word_count().await {
             Ok(v) => v,
-            Err(_) => {
-                state.read_fail_count = state.read_fail_count.saturating_add(1);
-                return Err(ImuReport::ReadError(state.read_fail_count));
-            }
+            Err(_) => return Err(ImuReport::ReadError),
         };
 
         if pending_words == 0 {
             let _ = self.wait_int1_any_edge_or_timeout().await;
             pending_words = match self.fifo_word_count().await {
                 Ok(v) => v,
-                Err(_) => {
-                    state.read_fail_count = state.read_fail_count.saturating_add(1);
-                    return Err(ImuReport::ReadError(state.read_fail_count));
-                }
+                Err(_) => return Err(ImuReport::ReadError),
             };
             if pending_words == 0 {
-                state.read_fail_count = state.read_fail_count.saturating_add(1);
-                return Err(ImuReport::ReadError(state.read_fail_count));
+                return Err(ImuReport::ReadError);
             }
         }
 
         match self.read_fifo_samples_into(fifo_batch).await {
-            Ok(n) if n > 0 => {
-                state.read_fail_count = 0;
-                Ok(n)
-            }
-            Ok(_) | Err(_) => {
-                state.read_fail_count = state.read_fail_count.saturating_add(1);
-                Err(ImuReport::ReadError(state.read_fail_count))
-            }
+            Ok(n) if n > 0 => Ok(n),
+            Ok(_) | Err(_) => Err(ImuReport::ReadError),
         }
     }
 

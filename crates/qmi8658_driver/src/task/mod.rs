@@ -39,11 +39,8 @@ pub async fn imu_capture_task(mut imu: Qmi8658<'static>, pipeline: &'static ImuP
                     for sample in fifo_batch[..n].iter().copied() {
                         pipeline.push_sample(sample);
                     }
-                    pipeline.set_read_fail_count(0);
                 }
-                Err(ImuReport::ReadError(count)) => {
-                    pipeline.set_read_fail_count(count);
-                }
+                Err(ImuReport::ReadError) => {}
                 Err(_) => break,
             }
         }

@@ -61,7 +61,6 @@ impl ImuRawSample {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct ImuFrame {
-    pub seq: u32,
     pub sample: ImuRawSample,
 }
 
@@ -69,8 +68,7 @@ impl fmt::Display for ImuFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "IMU,{},{},{},{},{},{},{}",
-            self.seq,
+            "IMU,{},{},{},{},{},{}",
             self.sample.accel[0],
             self.sample.accel[1],
             self.sample.accel[2],
@@ -84,13 +82,11 @@ impl fmt::Display for ImuFrame {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ImuReport {
     Sample(ImuRawSample),
-    ReadError(u32),
+    ReadError,
     InitError,
     InvalidChipId(u8),
     FifoConfigError,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Int1FifoStreamState {
-    pub read_fail_count: u32,
-}
+pub struct Int1FifoStreamState;
