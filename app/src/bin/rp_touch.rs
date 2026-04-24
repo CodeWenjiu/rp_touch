@@ -24,6 +24,8 @@ use panic_probe as _;
 use static_cell::StaticCell;
 
 const CORE1_STACK_SIZE: usize = 16 * 1024;
+pub(crate) const SYSTEM_CLOCK_HZ: u32 = 390_000_000;
+pub(crate) const SYSTEM_CLOCK_MHZ: i32 = (SYSTEM_CLOCK_HZ / 1_000_000) as i32;
 type SharedI2c1Bus = Mutex<CriticalSectionRawMutex, I2c<'static, peripherals::I2C1, Async>>;
 
 // Program metadata for `picotool info`.
@@ -53,9 +55,12 @@ bind_interrupts!(struct I2cIrqs {
 async fn main(spawner: Spawner) {
     board_alloc::init();
 
-    let p = embassy_rp::init(embassy_rp::config::Config::new(
-        ClockConfig::system_freq(280_000_000).expect("failed to set system clock to 160MHz"),
-    ));
+    let mut config = embassy_rp::config::Config::new(
+        ClockConfig::system_freq(SYSTEM_CLOCK_HZ)
+            .expect("failed to set system clock to configured frequency"),
+    );
+    config.clocks.core_voltage = embassy_rp::clocks::CoreVoltage::V1_30;
+    let p = embassy_rp::init(config);
 
     // Core1: UI state update + Slint render + display DMA.
     embassy_rp::multicore::spawn_core1(
@@ -98,6 +103,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(
         tasks::usb_telemetry::usb_telemetry_task(class, imu_pipeline, touch_pipeline).unwrap(),
     );
+    spawner.spawn(tasks::chip_temp::chip_temp_task(p.ADC, p.ADC_TEMP_SENSOR).unwrap());
 
     loop {
         Timer::after(Duration::from_secs(1)).await;

@@ -1,7 +1,9 @@
 use embassy_futures::select::{Either, select};
 use embassy_time::{Duration, Timer};
 
-use crate::shared::{IMU_REPORT_PERIOD_MS, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState};
+use crate::shared::{
+    CHIP_TEMP_WATCH, IMU_REPORT_PERIOD_MS, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState,
+};
 
 #[embassy_executor::task]
 pub async fn usb_telemetry_task(
@@ -15,10 +17,12 @@ pub async fn usb_telemetry_task(
 
     let mut imu_receiver = IMU_WATCH.receiver().unwrap();
     let mut touch_receiver = TOUCH_WATCH.receiver().unwrap();
+    let mut temp_receiver = CHIP_TEMP_WATCH.receiver().unwrap();
     let mut ui_state_receiver = UI_STATE_WATCH.receiver().unwrap();
 
     let mut latest_imu = imu_receiver.try_get().unwrap_or_default();
     let mut latest_touch = touch_receiver.try_get().unwrap_or_default();
+    let mut latest_temp_c = temp_receiver.try_get().unwrap_or(0);
     let mut ui_state = ui_state_receiver
         .try_get()
         .unwrap_or(UiRenderState::Starting);
@@ -44,6 +48,9 @@ pub async fn usb_telemetry_task(
                 while let Some(frame) = touch_receiver.try_changed() {
                     latest_touch = frame;
                 }
+                while let Some(temp_c) = temp_receiver.try_changed() {
+                    latest_temp_c = temp_c;
+                }
                 while let Some(state) = ui_state_receiver.try_changed() {
                     ui_state = state;
                 }
@@ -54,8 +61,9 @@ pub async fn usb_telemetry_task(
 
                 let _ = usb_serial::usb_println!(
                     serial,
-                    "{},touch={:?},ui_state={:?},imu_state={:?},touch_state={:?},touch_chip=0x{:02X}",
+                    "{},temp_c={},touch={:?},ui_state={:?},imu_state={:?},touch_state={:?},touch_chip=0x{:02X}",
                     tilt,
+                    latest_temp_c,
                     latest_touch.sample,
                     ui_state,
                     imu_stats.state,

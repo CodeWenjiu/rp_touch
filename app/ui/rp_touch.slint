@@ -7,6 +7,10 @@ export component AppUi inherits Window {
     height: 456px;
 
     in-out property <float> tilt_ratio: 0.5;
+    in-out property <int> ui_temp_c: 0;
+    in-out property <int> ui_cpu_mhz: 0;
+    in-out property <int> ui_pitch_deg: 0;
+    in-out property <int> ui_roll_deg: 0;
     in-out property <int> ui_seconds: 0;
     in-out property <int> ui_fps: 0;
     in-out property <bool> ui_touch_active: false;
@@ -33,6 +37,8 @@ export component AppUi inherits Window {
             height: parent.height - 24px;
             visible: root.active_page == 0;
             tilt_ratio: root.tilt_ratio;
+            ui_temp_c: root.ui_temp_c;
+            ui_cpu_mhz: root.ui_cpu_mhz;
             ui_seconds: root.ui_seconds;
             panel_state: root.home_panel_state;
             open_imu => {
@@ -51,7 +57,8 @@ export component AppUi inherits Window {
             width: parent.width - 24px;
             height: parent.height - 24px;
             visible: root.active_page == 1;
-            tilt_ratio: root.tilt_ratio;
+            pitch_deg: root.ui_pitch_deg;
+            roll_deg: root.ui_roll_deg;
             back => {
                 root.active_page = 0;
                 root.home_panel_state = 1;

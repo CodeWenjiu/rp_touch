@@ -49,7 +49,8 @@ impl ImuRawSample {
         // Use f32 end-to-end to stay on the hard-float path for arithmetic.
         let [ax, ay, az] = self.accel_g_8g();
 
-        let pitch_deg = ax.atan2((ay * ay + az * az).sqrt()) * RAD_TO_DEG;
+        // Align pitch sign with the board's forward tilt convention used by raw sensor telemetry.
+        let pitch_deg = (-ax).atan2((ay * ay + az * az).sqrt()) * RAD_TO_DEG;
         let roll_deg = ay.atan2(az) * RAD_TO_DEG;
 
         ImuTiltAngles {

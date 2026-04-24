@@ -1,13 +1,18 @@
 import { BackChip } from "../widgets.slint";
 
 export component ImuAppView inherits Rectangle {
-    in property <float> tilt_ratio: 0.5;
+    in property <int> pitch_deg: 0;
+    in property <int> roll_deg: 0;
     callback back();
 
-    property <int> tilt_zone: root.tilt_ratio > 0.66 ? 2 : (root.tilt_ratio < 0.34 ? 0 : 1);
-    property <string> tilt_state: root.tilt_zone == 2 ? "UP" : (root.tilt_zone == 0 ? "DOWN" : "LEVEL");
-    property <color> tilt_color: root.tilt_zone == 2 ? #ff8b59 : (root.tilt_zone == 0 ? #5ca8ff : #30c897);
-    property <float> tilt_percent: root.tilt_ratio * 100;
+    function clamp_unit(v: float) -> float {
+        return Math.max(-1.0, Math.min(1.0, v));
+    }
+
+    property <bool> is_level: Math.abs(root.pitch_deg) <= 2 && Math.abs(root.roll_deg) <= 2;
+    property <color> level_color: root.is_level ? #30c897 : #ff8b59;
+    property <float> norm_pitch: root.clamp_unit(root.pitch_deg / 30.0);
+    property <float> norm_roll: root.clamp_unit(root.roll_deg / 30.0);
 
     background: #0a1221;
     border-radius: 30px;
@@ -22,9 +27,9 @@ export component ImuAppView inherits Rectangle {
     }
 
     Text {
-        x: 108px;
+        x: 96px;
         y: 20px;
-        text: "IMU";
+        text: "LEVEL";
         color: #eef4ff;
         font-size: 24px;
     }
@@ -49,69 +54,132 @@ export component ImuAppView inherits Rectangle {
         background: #121d33;
 
         Text {
-            x: 16px;
-            y: 18px;
-            text: "Tilt State";
-            color: #89a0d1;
-            font-size: 13px;
-        }
-
-        Text {
-            x: 16px;
-            y: 52px;
-            width: parent.width - 32px;
-            text: root.tilt_state;
-            color: root.tilt_color;
-            font-size: 54px;
+            x: 0px;
+            y: 14px;
+            width: parent.width;
+            text: root.is_level ? "LEVEL LOCKED" : "ADJUST DEVICE";
+            color: root.level_color;
+            font-size: 15px;
             horizontal-alignment: center;
         }
 
+        // Bubble level field
         Rectangle {
-            x: 16px;
-            y: 144px;
-            width: parent.width - 32px;
-            height: 38px;
-            border-radius: 19px;
-            border-width: 1px;
-            border-color: #3a4a6d;
-            background: #1e2a46;
+            x: (parent.width / 2) - 96px;
+            y: 40px;
+            width: 192px;
+            height: 192px;
+            border-radius: 96px;
+            border-width: 2px;
+            border-color: #3d4d70;
+            background: #182641;
             clip: true;
 
             Rectangle {
-                x: 0px;
-                y: 0px;
-                width: parent.width * root.tilt_ratio;
-                height: parent.height;
-                border-radius: 19px;
-                background: root.tilt_color;
+                x: 20px;
+                y: 20px;
+                width: parent.width - 40px;
+                height: parent.height - 40px;
+                border-radius: (self.width / 2);
+                border-width: 1px;
+                border-color: #304262;
+                background: #00000000;
+            }
+
+            Rectangle {
+                x: (parent.width / 2) - 1px;
+                y: 22px;
+                width: 2px;
+                height: parent.height - 44px;
+                background: #2f4263;
+            }
+
+            Rectangle {
+                x: 22px;
+                y: (parent.height / 2) - 1px;
+                width: parent.width - 44px;
+                height: 2px;
+                background: #2f4263;
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                x: (parent.width / 2) + root.norm_roll * 62px - (self.width / 2);
+                y: (parent.height / 2) - root.norm_pitch * 62px - (self.height / 2);
+                border-radius: 14px;
+                border-width: 2px;
+                border-color: #ffffffaa;
+                background: root.level_color;
+                animate x {
+                    duration: 70ms;
+                    easing: ease-out;
+                }
+                animate y {
+                    duration: 70ms;
+                    easing: ease-out;
+                }
             }
         }
 
         Rectangle {
-            x: 16px;
-            y: 200px;
-            width: parent.width - 32px;
-            height: 92px;
-            border-radius: 18px;
+            x: 14px;
+            y: 248px;
+            width: (parent.width / 2) - 21px;
+            height: 54px;
+            border-radius: 14px;
             border-width: 1px;
             border-color: #334361;
-            background: #192640;
+            background: #1a2742;
 
             Text {
-                x: 14px;
-                y: 14px;
-                text: "Balance";
-                color: #89a0d1;
-                font-size: 13px;
+                x: 0px;
+                y: 8px;
+                width: parent.width;
+                text: "PITCH";
+                color: #8fa5d1;
+                font-size: 11px;
+                horizontal-alignment: center;
             }
 
             Text {
-                x: 14px;
-                y: 42px;
-                width: parent.width - 28px;
-                text: root.tilt_percent + "%";
-                color: #e7f0ff;
-                font-size: 30px;
+                x: 0px;
+                y: 24px;
+                width: parent.width;
+                text: root.pitch_deg + " deg";
+                color: #e8f1ff;
+                font-size: 18px;
+                horizontal-alignment: center;
+            }
+        }
+
+        Rectangle {
+            x: (parent.width / 2) + 7px;
+            y: 248px;
+            width: (parent.width / 2) - 21px;
+            height: 54px;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: #334361;
+            background: #1a2742;
+
+            Text {
+                x: 0px;
+                y: 8px;
+                width: parent.width;
+                text: "ROLL";
+                color: #8fa5d1;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                x: 0px;
+                y: 24px;
+                width: parent.width;
+                text: root.roll_deg + " deg";
+                color: #e8f1ff;
+                font-size: 18px;
                 horizontal-alignment: center;
             }
         }

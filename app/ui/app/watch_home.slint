@@ -2,6 +2,8 @@ import { AppListTile } from "widgets.slint";
 
 export component WatchHomeView inherits Rectangle {
     in property <float> tilt_ratio: 0.5;
+    in property <int> ui_temp_c: 0;
+    in property <int> ui_cpu_mhz: 0;
     in property <int> ui_seconds: 0;
     in-out property <int> panel_state: 0; // 0: main, 1: apps
     callback open_imu();
@@ -19,8 +21,7 @@ export component WatchHomeView inherits Rectangle {
 
     property <int> tilt_zone: root.tilt_ratio > 0.66 ? 2 : (root.tilt_ratio < 0.34 ? 0 : 1);
     property <string> tilt_state: root.tilt_zone == 2 ? "UP" : (root.tilt_zone == 0 ? "DOWN" : "LEVEL");
-    property <color> tilt_color: root.tilt_zone == 2 ? #ff8b59 : (root.tilt_zone == 0 ? #5ca8ff : #30c897);
-    property <length> stack_offset: root.panel_state == 1 ? root.height + 14px : 0px;
+    property <length> stack_offset_x: root.panel_state == 1 ? root.width + 14px : 0px;
 
     background: #080e1a;
     border-radius: 30px;
@@ -31,30 +32,28 @@ export component WatchHomeView inherits Rectangle {
         y: 0px;
         width: parent.width;
         height: parent.height;
-        handle-swipe-down: root.panel_state == 0;
-        handle-swipe-up: root.panel_state == 1;
+        handle-swipe-right: root.panel_state == 0;
+        handle-swipe-left: root.panel_state == 1;
         swiped => {
-            // Built-in swipe recognition already applies direction + distance thresholds.
-            // Avoid adding a second, too-aggressive threshold here.
             root.panel_state = root.panel_state == 0 ? 1 : 0;
         }
     }
 
     stack := Rectangle {
-        x: 0px;
-        y: root.stack_offset;
-        width: parent.width;
-        height: parent.height * 2 + 14px;
+        x: root.stack_offset_x;
+        y: 0px;
+        width: parent.width * 2 + 14px;
+        height: parent.height;
         background: #00000000;
-        animate y {
+        animate x {
             duration: 220ms;
             easing: ease-in-out;
         }
 
-        // App list page (revealed by swipe down)
+        // App list page (revealed by swiping right from main page)
         Rectangle {
-            x: 0px;
-            y: -(root.height + 14px);
+            x: -(root.width + 14px);
+            y: 0px;
             width: root.width;
             height: root.height;
             background: #0a1221;
@@ -80,7 +79,7 @@ export component WatchHomeView inherits Rectangle {
                 Text {
                     x: 16px;
                     y: 36px;
-                    text: "Swipe up to return";
+                    text: "Swipe left to return";
                     color: #8fa3cc;
                     font-size: 13px;
                 }
@@ -94,9 +93,12 @@ export component WatchHomeView inherits Rectangle {
                 title: "IMU";
                 subtitle: "Tilt monitor and balance";
                 icon: @image-url("assets/imu_icon.svg");
-                accent: root.tilt_color;
+                accent: #66a6ff;
                 tapped => {
                     root.open_imu();
+                }
+                swipe_left => {
+                    root.panel_state = 0;
                 }
             }
 
@@ -111,6 +113,9 @@ export component WatchHomeView inherits Rectangle {
                 accent: #66a6ff;
                 tapped => {
                     root.open_timer();
+                }
+                swipe_left => {
+                    root.panel_state = 0;
                 }
             }
         }
@@ -188,98 +193,37 @@ export component WatchHomeView inherits Rectangle {
                     Text {
                         x: 14px;
                         y: 11px;
-                        text: "IMU STATUS";
+                        text: "CHIP TEMP";
                         color: #88a0d0;
                         font-size: 12px;
                     }
 
-                    Rectangle {
+                    Text {
                         x: 14px;
-                        y: 34px;
-                        width: 104px;
-                        height: 36px;
-                        border-radius: 18px;
-                        background: root.tilt_color;
-                        Text {
-                            x: 0px;
-                            y: 8px;
-                            width: parent.width;
-                            text: root.tilt_state;
-                            color: #ffffff;
-                            font-size: 15px;
-                            horizontal-alignment: center;
-                        }
+                        y: 30px;
+                        text: root.ui_temp_c + " C";
+                        color: #f2f7ff;
+                        font-size: 34px;
                     }
-
-                    Rectangle {
-                        x: 126px;
-                        y: 41px;
-                        width: parent.width - 140px;
-                        height: 20px;
-                        border-radius: 10px;
-                        border-width: 1px;
-                        border-color: #40517a;
-                        background: #223252;
-                        clip: true;
-
-                        Rectangle {
-                            x: 0px;
-                            y: 0px;
-                            width: parent.width * root.tilt_ratio;
-                            height: parent.height;
-                            border-radius: 10px;
-                            background: root.tilt_color;
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                x: 14px;
-                y: 286px;
-                width: parent.width - 28px;
-                height: 132px;
-                border-radius: 24px;
-                border-width: 1px;
-                border-color: #2a3550;
-                background: #101a2d;
-
-                Text {
-                    x: 16px;
-                    y: 18px;
-                    width: parent.width - 32px;
-                    text: "Swipe down for apps";
-                    color: #dbe7ff;
-                    font-size: 22px;
-                    horizontal-alignment: center;
-                }
-
-                Text {
-                    x: 16px;
-                    y: 60px;
-                    width: parent.width - 32px;
-                    text: "IMU and Timer are ready";
-                    color: #8ea4cf;
-                    font-size: 14px;
-                    horizontal-alignment: center;
-                }
-
-                Rectangle {
-                    x: (parent.width / 2) - 18px;
-                    y: 94px;
-                    width: 36px;
-                    height: 22px;
-                    border-radius: 11px;
-                    background: #223252;
 
                     Text {
-                        x: 0px;
-                        y: 1px;
-                        width: parent.width;
-                        text: "v";
+                        x: parent.width - 120px;
+                        y: 24px;
+                        width: 106px;
+                        text: "CPU";
+                        color: #8ea4cf;
+                        font-size: 12px;
+                        horizontal-alignment: right;
+                    }
+
+                    Text {
+                        x: parent.width - 120px;
+                        y: 42px;
+                        width: 106px;
+                        text: root.ui_cpu_mhz + " MHz";
                         color: #dbe7ff;
-                        font-size: 14px;
-                        horizontal-alignment: center;
+                        font-size: 19px;
+                        horizontal-alignment: right;
                     }
                 }
             }

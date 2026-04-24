@@ -4,12 +4,14 @@ export component AppListTile inherits Rectangle {
     in property <image> icon;
     in property <color> accent: #4aa1ff;
     callback tapped();
+    callback swipe_left();
 
     border-radius: 20px;
     border-width: 1px;
     border-color: #2a3550;
     background: touch.pressed ? #1e2a42 : #131d31;
     clip: true;
+    property <bool> swipe_claimed: false;
 
     Rectangle {
         x: 14px;
@@ -49,7 +51,7 @@ export component AppListTile inherits Rectangle {
 
     Rectangle {
         x: parent.width - 34px;
-        y: (parent.height / 2) - 10px;
+        y: (parent.height / 2) - 45px;
         width: 20px;
         height: 20px;
         border-radius: 10px;
@@ -71,8 +73,25 @@ export component AppListTile inherits Rectangle {
         y: 0px;
         width: parent.width;
         height: parent.height;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.swipe_claimed = false;
+            } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                root.swipe_claimed = false;
+            }
+        }
+        moved => {
+            let dx = self.mouse_x - self.pressed_x;
+            let dy = self.mouse_y - self.pressed_y;
+            if !root.swipe_claimed && dx < -24px && Math.abs(dy) * 2 < -dx {
+                root.swipe_claimed = true;
+                root.swipe_left();
+            }
+        }
         clicked => {
-            root.tapped();
+            if !root.swipe_claimed {
+                root.tapped();
+            }
         }
     }
 }
