@@ -1,0 +1,116 @@
+import { BackChip } from "../widgets.slint";
+
+export component TimerAppView inherits Rectangle {
+    in property <int> ui_seconds: 0;
+    callback back();
+
+    function pad2(value: int) -> string {
+        return value < 10 ? "0" + value : "" + value;
+    }
+
+    property <int> hours: Math.mod(root.ui_seconds / 3600, 24);
+    property <int> minutes: Math.mod(root.ui_seconds / 60, 60);
+    property <int> seconds: Math.mod(root.ui_seconds, 60);
+    property <string> hhmmss: root.pad2(root.hours) + ":" + root.pad2(root.minutes) + ":" + root.pad2(root.seconds);
+    property <bool> pulse_on: Math.mod(root.ui_seconds, 2) == 0;
+
+    background: #0a1221;
+    border-radius: 30px;
+    clip: true;
+
+    BackChip {
+        x: 16px;
+        y: 14px;
+        tapped => {
+            root.back();
+        }
+    }
+
+    Text {
+        x: 94px;
+        y: 20px;
+        text: "TIMER";
+        color: #eef4ff;
+        font-size: 24px;
+    }
+
+    Image {
+        x: parent.width - 52px;
+        y: 16px;
+        width: 32px;
+        height: 32px;
+        source: @image-url("../assets/timer_icon.svg");
+        image-fit: contain;
+    }
+
+    Rectangle {
+        x: 16px;
+        y: 64px;
+        width: parent.width - 32px;
+        height: 316px;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: #2b3652;
+        background: #121d33;
+
+        Text {
+            x: 16px;
+            y: 18px;
+            text: "Elapsed Time";
+            color: #89a0d1;
+            font-size: 13px;
+        }
+
+        Text {
+            x: 16px;
+            y: 58px;
+            width: parent.width - 32px;
+            text: root.hhmmss;
+            color: #f5f8ff;
+            font-size: 44px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            x: 18px;
+            y: 146px;
+            width: parent.width - 36px;
+            height: 30px;
+            border-radius: 15px;
+            border-width: 1px;
+            border-color: #384866;
+            background: #1d2a43;
+            clip: true;
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: (parent.width * root.seconds) / 60;
+                height: parent.height;
+                border-radius: 15px;
+                background: #66a6ff;
+            }
+        }
+
+        Rectangle {
+            x: (parent.width / 2) - 20px;
+            y: 212px;
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            border-width: 1px;
+            border-color: #3e4f72;
+            background: root.pulse_on ? #39d49d : #23304a;
+        }
+
+        Text {
+            x: 16px;
+            y: 266px;
+            width: parent.width - 32px;
+            text: "1Hz heartbeat indicator";
+            color: #8fa5d1;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}

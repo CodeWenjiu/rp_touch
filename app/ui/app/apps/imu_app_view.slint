@@ -1,0 +1,119 @@
+import { BackChip } from "../widgets.slint";
+
+export component ImuAppView inherits Rectangle {
+    in property <float> tilt_ratio: 0.5;
+    callback back();
+
+    property <int> tilt_zone: root.tilt_ratio > 0.66 ? 2 : (root.tilt_ratio < 0.34 ? 0 : 1);
+    property <string> tilt_state: root.tilt_zone == 2 ? "UP" : (root.tilt_zone == 0 ? "DOWN" : "LEVEL");
+    property <color> tilt_color: root.tilt_zone == 2 ? #ff8b59 : (root.tilt_zone == 0 ? #5ca8ff : #30c897);
+    property <float> tilt_percent: root.tilt_ratio * 100;
+
+    background: #0a1221;
+    border-radius: 30px;
+    clip: true;
+
+    BackChip {
+        x: 16px;
+        y: 14px;
+        tapped => {
+            root.back();
+        }
+    }
+
+    Text {
+        x: 108px;
+        y: 20px;
+        text: "IMU";
+        color: #eef4ff;
+        font-size: 24px;
+    }
+
+    Image {
+        x: parent.width - 52px;
+        y: 16px;
+        width: 32px;
+        height: 32px;
+        source: @image-url("../assets/imu_icon.svg");
+        image-fit: contain;
+    }
+
+    Rectangle {
+        x: 16px;
+        y: 64px;
+        width: parent.width - 32px;
+        height: 316px;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: #2b3652;
+        background: #121d33;
+
+        Text {
+            x: 16px;
+            y: 18px;
+            text: "Tilt State";
+            color: #89a0d1;
+            font-size: 13px;
+        }
+
+        Text {
+            x: 16px;
+            y: 52px;
+            width: parent.width - 32px;
+            text: root.tilt_state;
+            color: root.tilt_color;
+            font-size: 54px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            x: 16px;
+            y: 144px;
+            width: parent.width - 32px;
+            height: 38px;
+            border-radius: 19px;
+            border-width: 1px;
+            border-color: #3a4a6d;
+            background: #1e2a46;
+            clip: true;
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width * root.tilt_ratio;
+                height: parent.height;
+                border-radius: 19px;
+                background: root.tilt_color;
+            }
+        }
+
+        Rectangle {
+            x: 16px;
+            y: 200px;
+            width: parent.width - 32px;
+            height: 92px;
+            border-radius: 18px;
+            border-width: 1px;
+            border-color: #334361;
+            background: #192640;
+
+            Text {
+                x: 14px;
+                y: 14px;
+                text: "Balance";
+                color: #89a0d1;
+                font-size: 13px;
+            }
+
+            Text {
+                x: 14px;
+                y: 42px;
+                width: parent.width - 28px;
+                text: root.tilt_percent + "%";
+                color: #e7f0ff;
+                font-size: 30px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}

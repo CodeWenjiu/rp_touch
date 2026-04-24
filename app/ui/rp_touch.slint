@@ -1,6 +1,6 @@
-import { HomeView } from "home_view.slint";
-import { ImuAppView } from "imu_app_view.slint";
-import { TimerAppView } from "timer_app_view.slint";
+import { WatchHomeView } from "app/watch_home.slint";
+import { ImuAppView } from "app/apps/imu_app_view.slint";
+import { TimerAppView } from "app/apps/timer_app_view.slint";
 
 export component AppUi inherits Window {
     width: 280px;
@@ -13,6 +13,7 @@ export component AppUi inherits Window {
     in-out property <int> ui_touch_x: 0;
     in-out property <int> ui_touch_y: 0;
     in-out property <int> active_page: 0;
+    in-out property <int> home_panel_state: 0;
 
     ui_timer := Timer {
         interval: 1s;
@@ -25,7 +26,7 @@ export component AppUi inherits Window {
     Rectangle {
         background: #050914;
 
-        HomeView {
+        WatchHomeView {
             x: 12px;
             y: 12px;
             width: parent.width - 24px;
@@ -33,11 +34,14 @@ export component AppUi inherits Window {
             visible: root.active_page == 0;
             tilt_ratio: root.tilt_ratio;
             ui_seconds: root.ui_seconds;
+            panel_state: root.home_panel_state;
             open_imu => {
                 root.active_page = 1;
+                root.home_panel_state = 1;
             }
             open_timer => {
                 root.active_page = 2;
+                root.home_panel_state = 1;
             }
         }
 
@@ -50,6 +54,7 @@ export component AppUi inherits Window {
             tilt_ratio: root.tilt_ratio;
             back => {
                 root.active_page = 0;
+                root.home_panel_state = 1;
             }
         }
 
@@ -62,6 +67,7 @@ export component AppUi inherits Window {
             ui_seconds: root.ui_seconds;
             back => {
                 root.active_page = 0;
+                root.home_panel_state = 1;
             }
         }
 
