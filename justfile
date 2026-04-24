@@ -10,6 +10,6 @@ _default:
 run bin="rp_touch":
     cargo run -p app --bin {{ bin }} --target {{ fw_target }} --release
 
-# Run host simulator (tools/<bin>_sim).
+# Run host simulator (workspace member: <bin>_sim package).
 sim bin="rp_touch":
-    cargo run --manifest-path tools/{{ bin }}_sim/Cargo.toml --target {{ host_target }}
+    cargo run -p {{ bin }}_sim --target {{ host_target }}
