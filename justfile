@@ -1,19 +1,16 @@
-set shell := ["powershell.exe", "-NoProfile", "-Command"]
-
-fw_target := "thumbv8m.main-none-eabihf"
-host_target := "x86_64-pc-windows-msvc"
+set shell := ["nu", "-c"]
 
 _default:
     @just --list
 
 # Run firmware binary on target board (build+flash via configured runner).
 run bin="rp_touch":
-    cargo run -p app --bin {{ bin }} --target {{ fw_target }} --release
+    cargo run -p app --bin {{ bin }} --release
 
-# Run host simulator (workspace member: <bin>_sim package).
+# Run simulator.
 sim bin="rp_touch":
-    cargo run -p {{ bin }}_sim --target {{ host_target }}
+    cargo run -p {{ bin }}_sim
 
 # Run host GUI/desktop tool.
 host:
-    cargo run -p rp_touch_host --target {{ host_target }}
+    cargo run -p rp_touch_host
