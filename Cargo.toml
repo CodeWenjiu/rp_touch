@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc", "crates/ft3168_driver", "crates/slint_backend", "tools/rp_touch_sim"]
+members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc", "crates/ft3168_driver", "crates/slint_backend", "tools/rp_touch_sim", "tools/rp_touch_host"]
 default-members = ["app"]
 resolver = "2"
 

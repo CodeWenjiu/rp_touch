@@ -4631,6 +4631,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rp_touch_host"
+version = "0.1.0"
+
+[[package]]
 name = "rp_touch_sim"
 version = "0.1.0"
 dependencies = [

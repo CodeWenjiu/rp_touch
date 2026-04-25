@@ -24,7 +24,7 @@ use panic_probe as _;
 use static_cell::StaticCell;
 
 const CORE1_STACK_SIZE: usize = 16 * 1024;
-pub(crate) const SYSTEM_CLOCK_HZ: u32 = 390_000_000;
+pub(crate) const SYSTEM_CLOCK_HZ: u32 = 360_000_000;
 pub(crate) const SYSTEM_CLOCK_MHZ: i32 = (SYSTEM_CLOCK_HZ / 1_000_000) as i32;
 type SharedI2c1Bus = Mutex<CriticalSectionRawMutex, I2c<'static, peripherals::I2C1, Async>>;
 

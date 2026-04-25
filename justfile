@@ -13,3 +13,7 @@ run bin="rp_touch":
 # Run host simulator (workspace member: <bin>_sim package).
 sim bin="rp_touch":
     cargo run -p {{ bin }}_sim --target {{ host_target }}
+
+# Run host GUI/desktop tool.
+host:
+    cargo run -p rp_touch_host --target {{ host_target }}
