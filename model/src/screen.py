@@ -32,6 +32,7 @@ def build_screen() -> Compound:
             )
         extrude(amount=-TOUCH_PANEL_DEPTH, mode=Mode.SUBTRACT)
     housing.part.color = HOUSING_COLOR
+    housing.part.label = "Housing"
 
     # Step 2: Joint on housing bottom face
     RigidJoint(
@@ -47,6 +48,7 @@ def build_screen() -> Compound:
             radius=TOUCH_PANEL_FILLET_R,
         )
     bezel.part.color = BEZEL_COLOR
+    bezel.part.label = "Bezel"
 
     with BuildPart() as display:
         Box(DISP_WIDTH, DISP_LENGTH, 0.1)
@@ -55,6 +57,7 @@ def build_screen() -> Compound:
             radius=DISP_FILLET_R,
         )
     display.part.color = LCD_COLOR
+    display.part.label = "Display"
 
     return housing.part, [bezel.part, display.part]
 

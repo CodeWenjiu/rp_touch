@@ -13,15 +13,15 @@ import pcb
 housing, screen_subs = screen.build_screen()
 pcb_asm = pcb.build_pcb()
 
-# 2. Connect: screen housing bottom → PCB top face
-#    PCB stays in place; housing moves to align
+# 2. Connect screen housing bottom → PCB top face
 pcb_board = pcb_asm.children[0]
 pcb_board.joints["top"].connect_to(housing.joints["bottom"])
 
-# 3. Position screen sub-parts relative to the moved housing
+# 3. Position screen sub-parts after housing moved
 bezel, display = screen.position_screen_children(housing, *screen_subs)
+screen_asm = Compound(children=[housing, bezel, display], label="Screen")
 
-# 4. Wrap into Compounds
-screen_asm = Compound(children=[housing, bezel, display])
+# 4. Final assembly
+rp_touch = Compound(children=[screen_asm, pcb_asm], label="RP Touch")
 
-show([screen_asm, pcb_asm])
+show(rp_touch)

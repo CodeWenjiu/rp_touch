@@ -26,6 +26,7 @@ def build_pcb() -> Compound:
             radius=PCB_FILLET_R,
         )
     pcb.part.color = PCB_COLOR
+    pcb.part.label = "PCB"
 
     RigidJoint("top", pcb.part, Location((0, 0, PCB_THICKNESS / 2)))
 
@@ -39,6 +40,7 @@ def build_pcb() -> Compound:
                 RegularPolygon(radius=1.5, side_count=6)
             extrude(amount=STANDOFF_H)
         s.part.color = STANDOFF_COLOR
+        s.part.label = "Standoff"
         s_top_z = s.part.bounding_box().max.Z
         s.part.move(Pos(x, y, pcb_bottom_z - s_top_z))
         standoffs.append(s.part)
@@ -52,4 +54,4 @@ def build_pcb() -> Compound:
         ph.move(Pos(x, ph_c_y, pcb_bottom_z - base_half))
         pin_header_compounds.append(ph)
 
-    return Compound(children=[pcb.part] + standoffs + pin_header_compounds)
+    return Compound(children=[pcb.part] + standoffs + pin_header_compounds, label="PCB Assembly")
