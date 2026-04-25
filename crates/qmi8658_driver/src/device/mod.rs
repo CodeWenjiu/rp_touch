@@ -15,7 +15,7 @@ use crate::{
         CTRL7_GYRO_ENABLE, CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT, CTRL9_CMD_ACK, CTRL9_CMD_RST_FIFO,
         QMI8658_CHIP_ID, QMI8658_REG_CTRL1, QMI8658_REG_CTRL2, QMI8658_REG_CTRL3,
         QMI8658_REG_CTRL7, QMI8658_REG_CTRL8, QMI8658_REG_CTRL9, QMI8658_REG_FIFO_CTRL,
-        QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_RESET, QMI8658_REG_STATUSINT, QMI8658_REG_WHO_AM_I,
+        QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_TEMP_L, QMI8658_REG_RESET, QMI8658_REG_STATUSINT, QMI8658_REG_WHO_AM_I,
         RESET_SOFT_CMD,
     },
     types::{Error, FifoConfig, ImuReport, Qmi8658Config},
@@ -134,6 +134,13 @@ impl<'d> Qmi8658<'d> {
         self.enable_fifo_wtm_int1(config)
             .await
             .map_err(|_| ImuReport::FifoConfigError)
+    }
+
+    pub async fn read_temperature(&mut self) -> Result<i32, Error> {
+        let mut buf = [0u8; 2];
+        self.read_regs(QMI8658_REG_TEMP_L, &mut buf).await?;
+        let raw = i16::from_le_bytes([buf[0], buf[1]]);
+        Ok(raw as i32 * 10 / 256)
     }
 
     pub async fn soft_reset(&mut self) -> Result<(), Error> {

@@ -1,6 +1,6 @@
 use embassy_time::{Duration, Instant};
 
-use crate::shared::{CHIP_TEMP_WATCH, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState};
+use crate::shared::{CHIP_TEMP_WATCH, IMU_TEMP_WATCH, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState};
 use crate::slint_ui;
 use crate::SYSTEM_CLOCK_MHZ;
 
@@ -52,8 +52,10 @@ pub async fn ui_render_task() {
     let mut imu_ui_rx = IMU_WATCH.receiver().unwrap();
     let mut touch_ui_rx = TOUCH_WATCH.receiver().unwrap();
     let mut temp_ui_rx = CHIP_TEMP_WATCH.receiver().unwrap();
+    let mut imu_temp_ui_rx = IMU_TEMP_WATCH.receiver().unwrap();
     let mut latest_imu = imu_ui_rx.try_get().unwrap_or_default();
     let mut latest_temp_c = temp_ui_rx.try_get().unwrap_or(0);
+    let mut latest_imu_temp_c = imu_temp_ui_rx.try_get().unwrap_or(0);
     let mut last_ratio = f32::NAN;
     let mut last_imu_redraw_at = Instant::now();
     let mut touch_active = false;
@@ -64,6 +66,7 @@ pub async fn ui_render_task() {
     let mut last_rendered_at = Instant::now();
 
     ui.set_ui_temp_c(latest_temp_c);
+    ui.set_ui_imu_temp_c((latest_imu_temp_c + 5) / 10);
 
     loop {
         let mut imu_updated = false;
@@ -89,6 +92,12 @@ pub async fn ui_render_task() {
         if let Some(temp_c) = temp_ui_rx.try_changed() {
             latest_temp_c = temp_c;
             ui.set_ui_temp_c(latest_temp_c);
+            backend.request_redraw();
+        }
+
+        if let Some(imu_temp_c) = imu_temp_ui_rx.try_changed() {
+            latest_imu_temp_c = imu_temp_c;
+            ui.set_ui_imu_temp_c((latest_imu_temp_c + 5) / 10);
             backend.request_redraw();
         }
 

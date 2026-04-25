@@ -8,4 +8,8 @@ impl<'a> ImuReader<'a> {
             sample: self.pipeline.latest_sample(),
         }
     }
+
+    pub fn read_latest_temp(&self) -> i32 {
+        self.pipeline.latest_temp()
+    }
 }

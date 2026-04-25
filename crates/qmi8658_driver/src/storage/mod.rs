@@ -19,6 +19,7 @@ pub struct ImuPipeline {
     gyro_x: AtomicI32,
     gyro_y: AtomicI32,
     gyro_z: AtomicI32,
+    temp_c: AtomicI32,
 }
 
 impl ImuPipeline {
@@ -32,6 +33,7 @@ impl ImuPipeline {
             gyro_x: AtomicI32::new(0),
             gyro_y: AtomicI32::new(0),
             gyro_z: AtomicI32::new(0),
+            temp_c: AtomicI32::new(0),
         }
     }
 
@@ -78,6 +80,14 @@ impl ImuPipeline {
         self.gyro_x.store(sample.gyro[0] as i32, Ordering::Relaxed);
         self.gyro_y.store(sample.gyro[1] as i32, Ordering::Relaxed);
         self.gyro_z.store(sample.gyro[2] as i32, Ordering::Relaxed);
+    }
+
+    pub fn push_temp(&self, temp_c: i32) {
+        self.temp_c.store(temp_c, Ordering::Relaxed);
+    }
+
+    pub(crate) fn latest_temp(&self) -> i32 {
+        self.temp_c.load(Ordering::Relaxed)
     }
 
     pub(crate) fn latest_sample(&self) -> ImuRawSample {

@@ -13,6 +13,7 @@ pub const QMI8658_REG_FIFO_SMPL_CNT: u8 = 0x15;
 pub const QMI8658_REG_FIFO_STATUS: u8 = 0x16;
 pub const QMI8658_REG_FIFO_DATA: u8 = 0x17;
 pub const QMI8658_REG_STATUSINT: u8 = 0x2D;
+pub const QMI8658_REG_TEMP_L: u8 = 0x33;
 pub const QMI8658_REG_AX_L: u8 = 0x35;
 pub const QMI8658_REG_RESET: u8 = 0x60;
 

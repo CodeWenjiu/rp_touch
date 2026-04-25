@@ -9,6 +9,7 @@ pub(crate) static IMU_WATCH: Watch<CriticalSectionRawMutex, qmi8658_driver::ImuF
 pub(crate) static TOUCH_WATCH: Watch<CriticalSectionRawMutex, ft3168_driver::TouchFrame, 4> =
     Watch::new();
 pub(crate) static CHIP_TEMP_WATCH: Watch<CriticalSectionRawMutex, i32, 4> = Watch::new();
+pub(crate) static IMU_TEMP_WATCH: Watch<CriticalSectionRawMutex, i32, 4> = Watch::new();
 pub(crate) static UI_STATE_WATCH: Watch<CriticalSectionRawMutex, UiRenderState, 4> = Watch::new();
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -1,6 +1,6 @@
 use embassy_time::{Duration, Timer};
 
-use crate::shared::{IMU_WATCH, SENSOR_WATCH_PERIOD_MS, TOUCH_WATCH};
+use crate::shared::{IMU_TEMP_WATCH, IMU_WATCH, SENSOR_WATCH_PERIOD_MS, TOUCH_WATCH};
 
 #[embassy_executor::task]
 pub async fn sensor_watch_task(
@@ -12,11 +12,14 @@ pub async fn sensor_watch_task(
 
     let imu_sender = IMU_WATCH.sender();
     let touch_sender = TOUCH_WATCH.sender();
+    let imu_temp_sender = IMU_TEMP_WATCH.sender();
 
     let mut last_imu_frame = imu_reader.read_latest_frame();
     let mut last_touch_frame = touch_reader.read_latest_frame();
+    let mut last_imu_temp_c = imu_reader.read_latest_temp();
     imu_sender.send(last_imu_frame);
     touch_sender.send(last_touch_frame);
+    imu_temp_sender.send(last_imu_temp_c);
 
     loop {
         let imu_frame = imu_reader.read_latest_frame();
@@ -29,6 +32,12 @@ pub async fn sensor_watch_task(
         if touch_frame != last_touch_frame {
             touch_sender.send(touch_frame);
             last_touch_frame = touch_frame;
+        }
+
+        let imu_temp_c = imu_reader.read_latest_temp();
+        if imu_temp_c != last_imu_temp_c {
+            imu_temp_sender.send(imu_temp_c);
+            last_imu_temp_c = imu_temp_c;
         }
 
         Timer::after(Duration::from_millis(SENSOR_WATCH_PERIOD_MS)).await;

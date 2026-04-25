@@ -1,4 +1,4 @@
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 
 use super::i2c_recovery::recover_i2c1_bus;
 
@@ -6,6 +6,7 @@ const IMU_FIFO_BATCH_SIZE: usize = 4;
 const IMU_READ_ERROR_LIMIT: u8 = 6;
 const IMU_READ_ERROR_BACKOFF_MS: u64 = 2;
 const IMU_REINIT_DELAY_MS: u64 = 50;
+const IMU_TEMP_READ_PERIOD_MS: u64 = 2000;
 
 fn report_to_capture_state(report: qmi8658_driver::ImuReport) -> qmi8658_driver::CaptureState {
     match report {
@@ -40,6 +41,7 @@ pub async fn imu_capture_task(
             gyro: [0; 3],
         }; IMU_FIFO_BATCH_SIZE];
         let mut consecutive_read_errors = 0u8;
+        let mut last_temp_read_at = Instant::now();
 
         pipeline.set_state(qmi8658_driver::CaptureState::Running);
 
@@ -52,6 +54,16 @@ pub async fn imu_capture_task(
                     consecutive_read_errors = 0;
                     for sample in fifo_batch[..n].iter().copied() {
                         pipeline.push_sample(sample);
+                    }
+
+                    let now = Instant::now();
+                    if now.saturating_duration_since(last_temp_read_at)
+                        >= Duration::from_millis(IMU_TEMP_READ_PERIOD_MS)
+                    {
+                        if let Ok(temp_c) = imu.read_temperature().await {
+                            pipeline.push_temp(temp_c);
+                        }
+                        last_temp_read_at = now;
                     }
                 }
                 Err(qmi8658_driver::ImuReport::ReadError) => {

@@ -3,6 +3,7 @@ import { AppListTile } from "widgets.slint";
 export component WatchHomeView inherits Rectangle {
     in property <float> tilt_ratio: 0.5;
     in property <int> ui_temp_c: 0;
+    in property <int> ui_imu_temp_c: 0;
     in property <int> ui_cpu_mhz: 0;
     in property <int> ui_seconds: 0;
     in-out property <int> panel_state: 0; // 0: main, 1: apps
@@ -184,7 +185,7 @@ export component WatchHomeView inherits Rectangle {
                     x: 16px;
                     y: 148px;
                     width: parent.width - 32px;
-                    height: 84px;
+                    height: 88px;
                     border-radius: 18px;
                     border-width: 1px;
                     border-color: #33405f;
@@ -192,23 +193,39 @@ export component WatchHomeView inherits Rectangle {
 
                     Text {
                         x: 14px;
-                        y: 11px;
-                        text: "CHIP TEMP";
+                        y: 8px;
+                        text: "CPU TEMP";
                         color: #88a0d0;
                         font-size: 12px;
                     }
 
                     Text {
                         x: 14px;
-                        y: 30px;
+                        y: 24px;
                         text: root.ui_temp_c + " C";
                         color: #f2f7ff;
-                        font-size: 34px;
+                        font-size: 24px;
+                    }
+
+                    Text {
+                        x: 14px;
+                        y: 54px;
+                        text: "IMU TEMP";
+                        color: #6a849b;
+                        font-size: 11px;
+                    }
+
+                    Text {
+                        x: 14px;
+                        y: 66px;
+                        text: root.ui_imu_temp_c + " C";
+                        color: #c5d9ef;
+                        font-size: 17px;
                     }
 
                     Text {
                         x: parent.width - 120px;
-                        y: 24px;
+                        y: 20px;
                         width: 106px;
                         text: "CPU";
                         color: #8ea4cf;
@@ -218,7 +235,7 @@ export component WatchHomeView inherits Rectangle {
 
                     Text {
                         x: parent.width - 120px;
-                        y: 42px;
+                        y: 36px;
                         width: 106px;
                         text: root.ui_cpu_mhz + " MHz";
                         color: #dbe7ff;
