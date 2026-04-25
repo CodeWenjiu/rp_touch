@@ -24,4 +24,7 @@ screen_asm = Compound(children=[housing, bezel, display], label="Screen")
 # 4. Final assembly
 rp_touch = Compound(children=[screen_asm, pcb_asm], label="RP Touch")
 
+# 5. Export to glTF
+export_gltf(rp_touch, "../tools/rp_touch_host/assets/rp_touch")
+
 show(rp_touch)

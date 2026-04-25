@@ -15,4 +15,4 @@ sim bin="rp_touch":
 
 # Run host GUI/desktop tool.
 host:
-    cargo run -p rp_touch_host
+    @cd tools/rp_touch_host; just run

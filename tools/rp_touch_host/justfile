@@ -1,0 +1,4 @@
+set shell := ["nu", "-c"]
+
+run:
+    bun run tauri dev

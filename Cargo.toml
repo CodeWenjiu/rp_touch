@@ -1,6 +1,17 @@
 [workspace]
-members = ["app", "crates/usb_serial", "crates/qmi8658_driver", "crates/co5300_driver", "crates/board_alloc", "crates/ft3168_driver", "crates/slint_backend", "tools/rp_touch_sim", "tools/rp_touch_host"]
-default-members = ["app"]
+members = [
+    "app",
+
+    "crates/usb_serial",
+    "crates/qmi8658_driver",
+    "crates/co5300_driver",
+    "crates/board_alloc",
+    "crates/ft3168_driver",
+    "crates/slint_backend",
+
+    "tools/rp_touch_sim",
+    "tools/rp_touch_host/src-tauri"
+]
 resolver = "2"
 
 [workspace.dependencies]
@@ -18,8 +29,8 @@ micromath = "2.1.0"
 panic-probe = "1.0.0"
 static_cell = "2.1"
 embedded-hal-async = "1.0.0"
-slint = { version = "1.16.0", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
-slint-build = "1.16.0"
+slint = { version = "1.16.1", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
+slint-build = "1.16.1"
 
 [profile.release]
 # Enable generation of debug symbols even on release builds
