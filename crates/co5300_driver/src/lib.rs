@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 mod config;
 mod device;
 mod framebuffer;

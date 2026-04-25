@@ -59,7 +59,7 @@ async fn main(spawner: Spawner) {
         ClockConfig::system_freq(SYSTEM_CLOCK_HZ)
             .expect("failed to set system clock to configured frequency"),
     );
-    config.clocks.core_voltage = embassy_rp::clocks::CoreVoltage::V1_30;
+    config.clocks.core_voltage = embassy_rp::clocks::CoreVoltage::V1_25;
     let p = embassy_rp::init(config);
 
     // Core1: UI state update + Slint render + display DMA.

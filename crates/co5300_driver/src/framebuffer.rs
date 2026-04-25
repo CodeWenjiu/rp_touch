@@ -8,15 +8,50 @@ pub enum DrawError {
     OutOfBounds { x: usize, y: usize },
 }
 
+/// Full display frame buffer (280×456×2 ≈ 255 KiB).
+///
+/// # Stack safety
+///
+/// This struct is too large for typical embedded stacks (e.g. 16 KiB on RP2350).
+/// Use one of these allocation strategies:
+///
+/// | Strategy               | Constructor        | Notes                                |
+/// |------------------------|--------------------|--------------------------------------|
+/// | Heap (global allocator)| `new_boxed()`      | Requires `alloc` feature.            |
+/// | Static / BSS           | `static FB: FrameBuffer = ...` | Compile-time, zero-cost.     |
+///
+/// `FrameBuffer::new()` / `Default::default()` exists for static initialization
+/// (`const` context) and for host-side simulators where stack space is ample.
+/// Avoid calling `new()` or `default()` inside a function body on embedded targets.
 #[derive(Clone)]
 pub struct FrameBuffer {
     pixels: [u16; PIXEL_COUNT],
 }
 
 impl FrameBuffer {
+    /// Creates a zero-filled `FrameBuffer`.
+    ///
+    /// # Stack warning
+    ///
+    /// On embedded targets (~255 KiB), calling this inside a function body will
+    /// likely overflow the stack. Prefer [`Self::new_boxed`] (heap) or a `static`
+    /// placement (BSS) instead.
     pub const fn new() -> Self {
         Self {
             pixels: [0; PIXEL_COUNT],
+        }
+    }
+
+    /// Heap-allocates a zero-filled `FrameBuffer` via the global allocator.
+    ///
+    /// Requires the `alloc` crate feature.
+    #[cfg(feature = "alloc")]
+    pub fn new_boxed() -> alloc::boxed::Box<Self> {
+        let mut boxed: alloc::boxed::Box<core::mem::MaybeUninit<Self>> =
+            alloc::boxed::Box::new_uninit();
+        unsafe {
+            core::ptr::write_bytes(boxed.as_mut_ptr() as *mut u8, 0, core::mem::size_of::<Self>());
+            boxed.assume_init()
         }
     }
 
