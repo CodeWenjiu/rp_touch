@@ -1,0 +1,8 @@
+set shell := ["nu", "-c"]
+
+_default:
+    @just --list
+
+# Run the 3D model viewer.
+run:
+    uv run src/main.py
