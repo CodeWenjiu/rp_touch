@@ -1,6 +1,6 @@
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, watch::Watch};
 
-pub(crate) const IMU_REPORT_PERIOD_MS: u64 = 500;
+pub(crate) const IMU_REPORT_PERIOD_MS: u64 = 20;
 pub(crate) const SENSOR_WATCH_PERIOD_MS: u64 = 5;
 pub(crate) const CHIP_TEMP_SAMPLE_PERIOD_MS: u64 = 800;
 

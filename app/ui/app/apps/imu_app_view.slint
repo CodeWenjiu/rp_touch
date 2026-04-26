@@ -3,6 +3,7 @@ import { BackChip } from "../widgets.slint";
 export component ImuAppView inherits Rectangle {
     in property <int> pitch_deg: 0;
     in property <int> roll_deg: 0;
+    in property <int> yaw_deg: 0;
     callback back();
 
     function clamp_unit(v: float) -> float {
@@ -11,8 +12,18 @@ export component ImuAppView inherits Rectangle {
 
     property <bool> is_level: Math.abs(root.pitch_deg) <= 2 && Math.abs(root.roll_deg) <= 2;
     property <color> level_color: root.is_level ? #30c897 : #ff8b59;
-    property <float> norm_pitch: root.clamp_unit(root.pitch_deg / 30.0);
-    property <float> norm_roll: root.clamp_unit(root.roll_deg / 30.0);
+
+    // Smooth large-angle mapping: sin(angle) keeps center linear while soft-saturating near extremes.
+    property <angle> pitch_angle: root.pitch_deg * 1deg;
+    property <angle> roll_angle: root.roll_deg * 1deg;
+    property <float> proj_pitch_raw: Math.sin(root.pitch_angle);
+    property <float> proj_roll_raw: Math.sin(root.roll_angle);
+    property <float> proj_mag: Math.sqrt(
+        root.proj_pitch_raw * root.proj_pitch_raw + root.proj_roll_raw * root.proj_roll_raw
+    );
+    property <float> proj_scale: root.proj_mag > 1.0 ? (1.0 / root.proj_mag) : 1.0;
+    property <float> norm_pitch: root.clamp_unit(root.proj_pitch_raw * root.proj_scale);
+    property <float> norm_roll: root.clamp_unit(root.proj_roll_raw * root.proj_scale);
 
     background: #0a1221;
     border-radius: 30px;
@@ -65,21 +76,21 @@ export component ImuAppView inherits Rectangle {
 
         // Bubble level field
         Rectangle {
-            x: (parent.width / 2) - 96px;
-            y: 40px;
-            width: 192px;
-            height: 192px;
-            border-radius: 96px;
+            x: (parent.width / 2) - 88px;
+            y: 48px;
+            width: 176px;
+            height: 176px;
+            border-radius: 88px;
             border-width: 2px;
             border-color: #3d4d70;
             background: #182641;
             clip: true;
 
             Rectangle {
-                x: 20px;
-                y: 20px;
-                width: parent.width - 40px;
-                height: parent.height - 40px;
+                x: 18px;
+                y: 18px;
+                width: parent.width - 36px;
+                height: parent.height - 36px;
                 border-radius: (self.width / 2);
                 border-width: 1px;
                 border-color: #304262;
@@ -88,16 +99,16 @@ export component ImuAppView inherits Rectangle {
 
             Rectangle {
                 x: (parent.width / 2) - 1px;
-                y: 22px;
+                y: 18px;
                 width: 2px;
-                height: parent.height - 44px;
+                height: parent.height - 36px;
                 background: #2f4263;
             }
 
             Rectangle {
-                x: 22px;
+                x: 18px;
                 y: (parent.height / 2) - 1px;
-                width: parent.width - 44px;
+                width: parent.width - 36px;
                 height: 2px;
                 background: #2f4263;
             }
@@ -105,20 +116,41 @@ export component ImuAppView inherits Rectangle {
             Rectangle {
                 width: 28px;
                 height: 28px;
-                x: (parent.width / 2) + root.norm_roll * 62px - (self.width / 2);
-                y: (parent.height / 2) - root.norm_pitch * 62px - (self.height / 2);
+                x: (parent.width / 2) + root.norm_roll * 54px - (self.width / 2);
+                y: (parent.height / 2) - root.norm_pitch * 54px - (self.height / 2);
                 border-radius: 14px;
                 border-width: 2px;
                 border-color: #ffffffaa;
                 background: root.level_color;
                 animate x {
-                    duration: 70ms;
-                    easing: ease-out;
+                    duration: 90ms;
+                    easing: ease-in-out;
                 }
                 animate y {
-                    duration: 70ms;
-                    easing: ease-out;
+                    duration: 90ms;
+                    easing: ease-in-out;
                 }
+            }
+        }
+
+        Rectangle {
+            x: 14px;
+            y: 226px;
+            width: parent.width - 28px;
+            height: 18px;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: #324460;
+            background: #16233c;
+
+            Text {
+                x: 0px;
+                y: 1px;
+                width: parent.width;
+                text: "YAW " + root.yaw_deg + " deg";
+                color: #b8ccf0;
+                font-size: 12px;
+                horizontal-alignment: center;
             }
         }
 

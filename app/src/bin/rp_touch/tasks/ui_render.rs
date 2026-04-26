@@ -58,6 +58,8 @@ pub async fn ui_render_task() {
     let mut latest_imu_temp_c = imu_temp_ui_rx.try_get().unwrap_or(0);
     let mut last_ratio = f32::NAN;
     let mut last_imu_redraw_at = Instant::now();
+    let mut last_imu_filter_update_at = Instant::now();
+    let mut tilt_filter = qmi8658_driver::ImuTiltComplementaryFilter::default();
     let mut touch_active = false;
     let mut touch_x = 0i32;
     let mut touch_y = 0i32;
@@ -108,15 +110,24 @@ pub async fn ui_render_task() {
         }
 
         if imu_updated {
-            let tilt = latest_imu.sample.tilt_deg_from_accel_8g();
+            let now = Instant::now();
+            let dt_s = now
+                .saturating_duration_since(last_imu_filter_update_at)
+                .as_micros() as f32
+                * 1.0e-6;
+            last_imu_filter_update_at = now;
+
+            let tilt = tilt_filter.update(&latest_imu.sample, dt_s);
             let pitch = tilt.pitch_deg;
             let roll = tilt.roll_deg;
+            let yaw = tilt.yaw_deg;
             let ratio = ((pitch + 90.0) / 180.0).clamp(0.0, 1.0);
             let imu_force_due = Instant::now().saturating_duration_since(last_imu_redraw_at)
                 >= Duration::from_millis(IMU_REDRAW_FORCE_MS);
             let imu_changed = last_ratio.is_nan() || (ratio - last_ratio).abs() >= TILT_REDRAW_EPS;
             let pitch_i = round_to_i32(pitch);
             let roll_i = round_to_i32(roll);
+            let yaw_i = round_to_i32(yaw);
 
             let mut imu_ui_changed = false;
             if ui.get_ui_pitch_deg() != pitch_i {
@@ -125,6 +136,10 @@ pub async fn ui_render_task() {
             }
             if ui.get_ui_roll_deg() != roll_i {
                 ui.set_ui_roll_deg(roll_i);
+                imu_ui_changed = true;
+            }
+            if ui.get_ui_yaw_deg() != yaw_i {
+                ui.set_ui_yaw_deg(yaw_i);
                 imu_ui_changed = true;
             }
 

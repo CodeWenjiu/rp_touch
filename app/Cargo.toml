@@ -20,6 +20,7 @@ co5300_driver = { path = "../crates/co5300_driver" }
 board_alloc = { path = "../crates/board_alloc" }
 ft3168_driver = { path = "../crates/ft3168_driver" }
 slint_backend = { path = "../crates/slint_backend" }
+rp_telemetry = { path = "../crates/rp_telemetry" }
 slint = { workspace = true }
 
 [build-dependencies]

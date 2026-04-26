@@ -5,4 +5,8 @@ _default:
 
 # Run the 3D model viewer.
 run:
+    uv run src/main.py --show
+
+# Export host model assets into model/build/.
+export:
     uv run src/main.py

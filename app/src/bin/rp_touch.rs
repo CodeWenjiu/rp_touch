@@ -100,9 +100,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(tasks::sensor_watch::sensor_watch_task(imu_pipeline, touch_pipeline).unwrap());
 
     let class = usb_serial::init(spawner, p.USB, usb_serial::UsbSerialConfig::default());
-    spawner.spawn(
-        tasks::usb_telemetry::usb_telemetry_task(class, imu_pipeline, touch_pipeline).unwrap(),
-    );
+    spawner.spawn(tasks::usb_telemetry::usb_telemetry_task(class).unwrap());
     spawner.spawn(tasks::chip_temp::chip_temp_task(p.ADC, p.ADC_TEMP_SENSOR).unwrap());
 
     loop {

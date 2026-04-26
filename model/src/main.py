@@ -1,30 +1,82 @@
-"""RP Touch — development board 3D model.
+﻿"""RP Touch development board 3D model.
 
-All dimensions in millimetres.
+All dimensions are in millimetres.
 """
 
-from build123d import *
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from build123d import Compound, export_gltf
 from ocp_vscode import show
 
-import screen
 import pcb
+import screen
 
-# 1. Build parts at origin
-housing, screen_subs = screen.build_screen()
-pcb_asm = pcb.build_pcb()
+MODEL_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_BASE = MODEL_ROOT / "build" / "rp_touch"
 
-# 2. Connect screen housing bottom → PCB top face
-pcb_board = pcb_asm.children[0]
-pcb_board.joints["top"].connect_to(housing.joints["bottom"])
 
-# 3. Position screen sub-parts after housing moved
-bezel, display = screen.position_screen_children(housing, *screen_subs)
-screen_asm = Compound(children=[housing, bezel, display], label="Screen")
+def build_model() -> Compound:
+    housing, screen_subs = screen.build_screen()
+    pcb_asm = pcb.build_pcb()
 
-# 4. Final assembly
-rp_touch = Compound(children=[screen_asm, pcb_asm], label="RP Touch")
+    pcb_board = pcb_asm.children[0]
+    pcb_board.joints["top"].connect_to(housing.joints["bottom"])
 
-# 5. Export to glTF
-export_gltf(rp_touch, "../tools/rp_touch_host/assets/rp_touch")
+    bezel, display = screen.position_screen_children(housing, *screen_subs)
+    screen_asm = Compound(children=[housing, bezel, display], label="Screen")
 
-show(rp_touch)
+    return Compound(children=[screen_asm, pcb_asm], label="RP Touch")
+
+
+def resolve_output_base(raw: str | None) -> Path:
+    if raw is None:
+        return DEFAULT_OUTPUT_BASE
+
+    output_base = Path(raw)
+    if not output_base.is_absolute():
+        output_base = MODEL_ROOT / output_base
+    return output_base
+
+
+def export_model(model: Compound, output_base: Path) -> Path:
+    output_base.parent.mkdir(parents=True, exist_ok=True)
+    export_gltf(model, output_base.as_posix())
+    return output_base
+
+
+def export_to_build(model: Compound) -> Path:
+    return export_model(model, DEFAULT_OUTPUT_BASE)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build and export RP Touch model")
+    parser.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Output base path for glTF export. Default: model/build/rp_touch",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Open interactive viewer after export",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    model = build_model()
+
+    output_base = resolve_output_base(args.out)
+    export_model(model, output_base)
+
+    if args.show:
+        show(model)
+
+
+if __name__ == "__main__":
+    main()

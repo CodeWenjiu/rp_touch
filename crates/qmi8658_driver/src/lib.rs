@@ -19,5 +19,5 @@ pub use storage::{ImuPipeline, ImuReader};
 pub use task::imu_capture_task;
 pub use types::{
     CaptureState, CaptureStats, Error, FifoConfig, FifoMode, FifoSize, ImuFrame, ImuRawSample,
-    ImuReport, ImuTiltAngles, Int1FifoStreamState, Qmi8658Config,
+    ImuReport, ImuTiltAngles, ImuTiltComplementaryFilter, Int1FifoStreamState, Qmi8658Config,
 };

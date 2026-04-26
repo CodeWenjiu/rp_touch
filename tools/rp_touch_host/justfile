@@ -2,3 +2,9 @@ set shell := ["nu", "-c"]
 
 run:
     bun run tauri dev
+
+model-export:
+    bun run model:export
+
+run-fresh:
+    bun run tauri:dev:fresh

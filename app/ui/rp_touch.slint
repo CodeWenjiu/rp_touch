@@ -12,6 +12,7 @@ export component AppUi inherits Window {
     in-out property <int> ui_cpu_mhz: 0;
     in-out property <int> ui_pitch_deg: 0;
     in-out property <int> ui_roll_deg: 0;
+    in-out property <int> ui_yaw_deg: 0;
     in-out property <int> ui_seconds: 0;
     in-out property <int> ui_fps: 0;
     in-out property <bool> ui_touch_active: false;
@@ -61,6 +62,7 @@ export component AppUi inherits Window {
             visible: root.active_page == 1;
             pitch_deg: root.ui_pitch_deg;
             roll_deg: root.ui_roll_deg;
+            yaw_deg: root.ui_yaw_deg;
             back => {
                 root.active_page = 0;
                 root.home_panel_state = 1;

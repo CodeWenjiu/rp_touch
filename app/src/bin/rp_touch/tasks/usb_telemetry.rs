@@ -1,31 +1,17 @@
 use embassy_futures::select::{Either, select};
 use embassy_time::{Duration, Timer};
+use rp_telemetry::TelemetryFrame;
 
-use crate::shared::{
-    CHIP_TEMP_WATCH, IMU_REPORT_PERIOD_MS, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState,
-};
+use crate::shared::{IMU_REPORT_PERIOD_MS, IMU_WATCH};
 
 #[embassy_executor::task]
-pub async fn usb_telemetry_task(
-    mut class: usb_serial::UsbSerialClass,
-    imu_pipeline: &'static qmi8658_driver::ImuPipeline,
-    touch_pipeline: &'static ft3168_driver::TouchPipeline,
-) -> ! {
+pub async fn usb_telemetry_task(mut class: usb_serial::UsbSerialClass) -> ! {
     let mut serial = usb_serial::UsbTextWriter::new(&mut class);
     serial.wait_connection().await;
     let _ = usb_serial::usb_println!(serial, "BOOT,display_ready");
 
     let mut imu_receiver = IMU_WATCH.receiver().unwrap();
-    let mut touch_receiver = TOUCH_WATCH.receiver().unwrap();
-    let mut temp_receiver = CHIP_TEMP_WATCH.receiver().unwrap();
-    let mut ui_state_receiver = UI_STATE_WATCH.receiver().unwrap();
-
     let mut latest_imu = imu_receiver.try_get().unwrap_or_default();
-    let mut latest_touch = touch_receiver.try_get().unwrap_or_default();
-    let mut latest_temp_c = temp_receiver.try_get().unwrap_or(0);
-    let mut ui_state = ui_state_receiver
-        .try_get()
-        .unwrap_or(UiRenderState::Starting);
     let mut buf = [0u8; 64];
 
     loop {
@@ -45,31 +31,11 @@ pub async fn usb_telemetry_task(
                 while let Some(frame) = imu_receiver.try_changed() {
                     latest_imu = frame;
                 }
-                while let Some(frame) = touch_receiver.try_changed() {
-                    latest_touch = frame;
-                }
-                while let Some(temp_c) = temp_receiver.try_changed() {
-                    latest_temp_c = temp_c;
-                }
-                while let Some(state) = ui_state_receiver.try_changed() {
-                    ui_state = state;
-                }
 
-                let tilt = latest_imu.sample.tilt_deg_from_accel_8g();
-                let imu_stats = imu_pipeline.capture_stats();
-                let touch_stats = touch_pipeline.capture_stats();
-
-                let _ = usb_serial::usb_println!(
-                    serial,
-                    "{},temp_c={},touch={:?},ui_state={:?},imu_state={:?},touch_state={:?},touch_chip=0x{:02X}",
-                    tilt,
-                    latest_temp_c,
-                    latest_touch.sample,
-                    ui_state,
-                    imu_stats.state,
-                    touch_stats.state,
-                    touch_stats.chip_id
-                );
+                let frame = TelemetryFrame::new(latest_imu.sample.accel, latest_imu.sample.gyro);
+                if let Ok(line) = frame.format::<96>() {
+                    let _ = usb_serial::usb_println!(serial, "{line}");
+                }
             }
         }
     }
