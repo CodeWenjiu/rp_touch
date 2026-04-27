@@ -2,8 +2,7 @@ use embassy_time::{Duration, Instant, Timer};
 
 use super::i2c_recovery::recover_i2c1_bus;
 
-const IMU_FIFO_BATCH_SIZE: usize = 4;
-const IMU_POLL_INTERVAL_MS: u64 = 2;
+const IMU_POLL_INTERVAL_MS: u64 = 5;
 const TOUCH_POLL_INTERVAL_MS: u64 = 12;
 const IMU_TEMP_READ_PERIOD_MS: u64 = 2000;
 const IMU_READ_ERROR_LIMIT: u8 = 6;
@@ -11,13 +10,12 @@ const TOUCH_READ_ERROR_LIMIT: u8 = 6;
 const RECOVERY_COOLDOWN_MS: u64 = 300;
 const HUB_IDLE_SLEEP_MS: u64 = 1;
 
-fn report_to_capture_state(report: qmi8658_driver::ImuReport) -> qmi8658_driver::CaptureState {
-    match report {
-        qmi8658_driver::ImuReport::InvalidChipId(chip_id) => {
+fn imu_error_to_capture_state(err: qmi8658_driver::Error) -> qmi8658_driver::CaptureState {
+    match err {
+        qmi8658_driver::Error::InvalidChipId(chip_id) => {
             qmi8658_driver::CaptureState::InvalidChipId(chip_id)
         }
-        qmi8658_driver::ImuReport::InitError => qmi8658_driver::CaptureState::InitFailed,
-        _ => qmi8658_driver::CaptureState::FifoConfigFailed,
+        _ => qmi8658_driver::CaptureState::InitFailed,
     }
 }
 
@@ -34,21 +32,18 @@ pub async fn sensor_hub_task(
     touch_pipeline: &'static ft3168_driver::TouchPipeline,
     i2c_bus: &'static crate::SharedI2c1Bus,
 ) -> ! {
-    let mut stream_state = qmi8658_driver::Int1FifoStreamState::default();
-    let mut fifo_batch = [qmi8658_driver::ImuRawSample {
-        accel: [0; 3],
-        gyro: [0; 3],
-    }; IMU_FIFO_BATCH_SIZE];
-
     loop {
         imu_pipeline.set_state(qmi8658_driver::CaptureState::Starting);
         touch_pipeline.set_state(ft3168_driver::CaptureState::Starting);
 
-        if let Err(report) = imu
-            .setup_int1_fifo_stream(qmi8658_driver::FifoConfig::default())
-            .await
-        {
-            imu_pipeline.set_state(report_to_capture_state(report));
+        if let Err(err) = imu.init().await {
+            imu_pipeline.set_state(imu_error_to_capture_state(err));
+            touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
+            recover_with_cooldown(i2c_bus).await;
+            continue;
+        }
+        if let Err(err) = imu.enable_accel_gyro().await {
+            imu_pipeline.set_state(imu_error_to_capture_state(err));
             touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
             recover_with_cooldown(i2c_bus).await;
             continue;
@@ -84,26 +79,17 @@ pub async fn sensor_hub_task(
                 did_work = true;
                 next_imu_poll_at = now + Duration::from_millis(IMU_POLL_INTERVAL_MS);
 
-                match imu
-                    .poll_int1_fifo_report(&mut stream_state, &mut fifo_batch)
-                    .await
-                {
-                    Ok(n) => {
+                match imu.read_accel_gyro_raw().await {
+                    Ok(sample) => {
                         imu_read_errors = 0;
-                        for sample in fifo_batch[..n].iter().copied() {
-                            imu_pipeline.push_sample(sample);
-                        }
+                        imu_pipeline.push_sample(sample);
                     }
-                    Err(qmi8658_driver::ImuReport::ReadError) => {
+                    Err(_) => {
                         imu_read_errors = imu_read_errors.saturating_add(1);
                         if imu_read_errors >= IMU_READ_ERROR_LIMIT {
                             imu_pipeline.set_state(qmi8658_driver::CaptureState::InitFailed);
                             should_recover = true;
                         }
-                    }
-                    Err(report) => {
-                        imu_pipeline.set_state(report_to_capture_state(report));
-                        should_recover = true;
                     }
                 }
             }

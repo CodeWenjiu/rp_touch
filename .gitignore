@@ -1,2 +1,3 @@
 **/target
 /.direnv
+tools/rp_touch_host/src-tauri/target-check

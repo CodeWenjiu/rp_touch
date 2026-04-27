@@ -22,6 +22,10 @@ type SerialConnectionPayload = {
   portName: string | null;
 };
 
+type SerialRawLinePayload = {
+  line: string;
+};
+
 type TauriApi = {
   invoke: typeof import("@tauri-apps/api/core").invoke;
   listen: typeof import("@tauri-apps/api/event").listen;
@@ -67,6 +71,7 @@ const PITCH_BASELINE_DEG = -20;
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const MIN_MODEL_RADIUS = 0.01;
 const CAMERA_FIT_PADDING = 1.2;
+const RAW_LOG_MAX_LINES = 200;
 const BASELINE_QUAT = new THREE.Quaternion().setFromAxisAngle(
   X_AXIS,
   toRadians(-PITCH_BASELINE_DEG)
@@ -128,6 +133,7 @@ function App() {
   const [serialConnected, setSerialConnected] = useState(false);
   const [serialBusy, setSerialBusy] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
+  const [rawSerialLines, setRawSerialLines] = useState<string[]>([]);
 
   const [orientation, setOrientation] = useState<TelemetryAnglePayload>({
     pitchDeg: 0,
@@ -140,7 +146,8 @@ function App() {
 
   useEffect(() => {
     let isCancelled = false;
-    let unlisten: UnlistenFn | null = null;
+    let unlistenTelemetry: UnlistenFn | null = null;
+    let unlistenRawSerial: UnlistenFn | null = null;
 
     const init = async () => {
       setIsLoading(true);
@@ -205,7 +212,7 @@ function App() {
       }
 
       try {
-        unlisten = await listen<TelemetryAnglePayload>(
+        unlistenTelemetry = await listen<TelemetryAnglePayload>(
           "telemetry-angle",
           (event) => {
             if (isCancelled) {
@@ -217,6 +224,30 @@ function App() {
                 prev
               )
             );
+          }
+        );
+
+        unlistenRawSerial = await listen<SerialRawLinePayload>(
+          "serial-raw-line",
+          (event) => {
+            if (isCancelled) {
+              return;
+            }
+
+            const line =
+              typeof event.payload?.line === "string"
+                ? event.payload.line.trimEnd()
+                : "";
+            if (!line) {
+              return;
+            }
+
+            setRawSerialLines((prev) => {
+              if (prev.length >= RAW_LOG_MAX_LINES) {
+                return [...prev.slice(prev.length - RAW_LOG_MAX_LINES + 1), line];
+              }
+              return [...prev, line];
+            });
           }
         );
       } catch (error) {
@@ -231,9 +262,8 @@ function App() {
 
     return () => {
       isCancelled = true;
-      if (unlisten) {
-        unlisten();
-      }
+      unlistenTelemetry?.();
+      unlistenRawSerial?.();
     };
   }, []);
 
@@ -257,11 +287,13 @@ function App() {
     setViewerError(null);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#e9eff6");
+    scene.background = new THREE.Color("#0f1824");
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 100);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.domElement.style.display = "block";
     renderer.domElement.style.width = "100%";
@@ -271,15 +303,20 @@ function App() {
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
-    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x3f4e67, 1.2);
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    const ambientLight = new THREE.AmbientLight(0xbfd4ff, 0.7);
+    const hemisphereLight = new THREE.HemisphereLight(0xdce9ff, 0x2f4059, 1.45);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
     keyLight.position.set(2.2, 2.8, 1.6);
-    const fillLight = new THREE.DirectionalLight(0x9eb3d6, 0.65);
+    const fillLight = new THREE.DirectionalLight(0xa8c0e8, 0.95);
     fillLight.position.set(-2.4, 1.2, -1.8);
+    const rimLight = new THREE.DirectionalLight(0x86aee8, 0.45);
+    rimLight.position.set(0.5, -1.8, -3.2);
 
+    scene.add(ambientLight);
     scene.add(hemisphereLight);
     scene.add(keyLight);
     scene.add(fillLight);
+    scene.add(rimLight);
 
     const pivot = new THREE.Group();
     pivot.quaternion.copy(toViewerQuaternion(orientation));
@@ -379,6 +416,7 @@ function App() {
       });
       setSerialConnected(true);
       setSelectedPort(connectedPort);
+      setRawSerialLines([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSerialError(message);
@@ -474,6 +512,18 @@ function App() {
         >
           Reset Yaw
         </button>
+
+        <details className="raw-log-panel">
+          <summary className="raw-log-summary">
+            Raw Serial
+            <span className="raw-log-count">{rawSerialLines.length}</span>
+          </summary>
+          <pre className="raw-log-content">
+            {rawSerialLines.length > 0
+              ? rawSerialLines.join("\n")
+              : "No serial lines yet."}
+          </pre>
+        </details>
 
         {isLoading && <div className="status">Loading model...</div>}
         {loadError && <div className="status error">{loadError}</div>}

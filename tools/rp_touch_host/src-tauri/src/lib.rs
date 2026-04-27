@@ -22,6 +22,7 @@ const SERIAL_BAUDRATE: u32 = 115_200;
 const SERIAL_TIMEOUT_MS: u64 = 50;
 const MAX_SERIAL_LINE_LEN: usize = 128;
 const TELEMETRY_EVENT: &str = "telemetry-angle";
+const RAW_SERIAL_EVENT: &str = "serial-raw-line";
 const RAD_TO_DEG: f32 = 57.295_78_f32;
 const DEG_TO_RAD: f32 = 0.017_453_292_f32;
 const ACCEL_LSB_PER_G_8G: f32 = 4096.0_f32;
@@ -54,6 +55,12 @@ struct TelemetryAnglePayload {
     quat_x: f32,
     quat_y: f32,
     quat_z: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SerialRawLinePayload {
+    line: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -426,6 +433,13 @@ fn process_serial_chunk(
     for &byte in chunk {
         match byte {
             b'\n' => {
+                if !line_buf.is_empty() {
+                    let payload = SerialRawLinePayload {
+                        line: line_buf.clone(),
+                    };
+                    let _ = app.emit(RAW_SERIAL_EVENT, payload);
+                }
+
                 if let Ok(frame) = TelemetryFrame::deformat(line_buf) {
                     let should_reset_heading =
                         reset_heading_requested.swap(false, Ordering::Relaxed);
