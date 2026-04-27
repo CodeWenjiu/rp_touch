@@ -5,6 +5,9 @@ fw_target := "thumbv8m.main-none-eabihf"
 _default:
     @just --list
 
+init:
+    @cd tools/rp_touch_host; just init
+
 # Run firmware binary on target board (build+flash via configured runner).
 run bin="rp_touch":
     cargo run -p app --bin {{ bin }} --target {{ fw_target }} --release
