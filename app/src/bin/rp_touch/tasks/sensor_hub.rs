@@ -3,7 +3,8 @@ use embassy_time::{Duration, Instant, Timer};
 use super::i2c_recovery::recover_i2c1_bus;
 
 const IMU_POLL_INTERVAL_MS: u64 = 5;
-const TOUCH_POLL_INTERVAL_MS: u64 = 12;
+const TOUCH_POLL_INTERVAL_MS: u64 = 20;
+const TOUCH_REINIT_INTERVAL_MS: u64 = 1500;
 const IMU_TEMP_READ_PERIOD_MS: u64 = 2000;
 const IMU_READ_ERROR_LIMIT: u8 = 6;
 const TOUCH_READ_ERROR_LIMIT: u8 = 6;
@@ -49,20 +50,23 @@ pub async fn sensor_hub_task(
             continue;
         }
 
+        let mut touch_ready = false;
+        let mut next_touch_reinit_at = Instant::now();
         match touch.init().await {
             Ok(chip_id) => {
                 touch_pipeline.set_chip_id(chip_id);
+                touch_pipeline.set_state(ft3168_driver::CaptureState::Running);
+                touch_ready = true;
             }
             Err(_) => {
-                imu_pipeline.set_state(qmi8658_driver::CaptureState::InitFailed);
                 touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
-                recover_with_cooldown(i2c_bus).await;
-                continue;
+                touch_pipeline.push_sample(ft3168_driver::TouchSample::default());
+                next_touch_reinit_at =
+                    Instant::now() + Duration::from_millis(TOUCH_REINIT_INTERVAL_MS);
             }
         }
 
         imu_pipeline.set_state(qmi8658_driver::CaptureState::Running);
-        touch_pipeline.set_state(ft3168_driver::CaptureState::Running);
 
         let mut imu_read_errors = 0u8;
         let mut touch_read_errors = 0u8;
@@ -95,22 +99,44 @@ pub async fn sensor_hub_task(
             }
 
             let now = Instant::now();
-            if now >= next_touch_poll_at {
-                did_work = true;
-                next_touch_poll_at = now + Duration::from_millis(TOUCH_POLL_INTERVAL_MS);
+            if touch_ready {
+                if now >= next_touch_poll_at {
+                    did_work = true;
+                    next_touch_poll_at = now + Duration::from_millis(TOUCH_POLL_INTERVAL_MS);
 
-                match touch.read_touch_sample().await {
-                    Ok(sample) => {
+                    match touch.read_touch_sample().await {
+                        Ok(sample) => {
+                            touch_read_errors = 0;
+                            touch_pipeline.push_sample(sample);
+                        }
+                        Err(_) => {
+                            touch_read_errors = touch_read_errors.saturating_add(1);
+                            touch_pipeline.push_sample(ft3168_driver::TouchSample::default());
+                            if touch_read_errors >= TOUCH_READ_ERROR_LIMIT {
+                                touch_ready = false;
+                                touch_read_errors = 0;
+                                touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
+                                next_touch_reinit_at =
+                                    Instant::now() + Duration::from_millis(TOUCH_REINIT_INTERVAL_MS);
+                            }
+                        }
+                    }
+                }
+            } else if now >= next_touch_reinit_at {
+                did_work = true;
+                match touch.init().await {
+                    Ok(chip_id) => {
+                        touch_pipeline.set_chip_id(chip_id);
+                        touch_pipeline.set_state(ft3168_driver::CaptureState::Running);
+                        touch_ready = true;
                         touch_read_errors = 0;
-                        touch_pipeline.push_sample(sample);
+                        next_touch_poll_at = Instant::now();
                     }
                     Err(_) => {
-                        touch_read_errors = touch_read_errors.saturating_add(1);
+                        touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
                         touch_pipeline.push_sample(ft3168_driver::TouchSample::default());
-                        if touch_read_errors >= TOUCH_READ_ERROR_LIMIT {
-                            touch_pipeline.set_state(ft3168_driver::CaptureState::InitFailed);
-                            should_recover = true;
-                        }
+                        next_touch_reinit_at =
+                            Instant::now() + Duration::from_millis(TOUCH_REINIT_INTERVAL_MS);
                     }
                 }
             }

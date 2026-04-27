@@ -67,7 +67,7 @@ async function requireTauriApi(): Promise<TauriApi> {
 }
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
-const PITCH_BASELINE_DEG = -20;
+const PITCH_BASELINE_DEG = 0;
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const MIN_MODEL_RADIUS = 0.01;
 const CAMERA_FIT_PADDING = 1.2;

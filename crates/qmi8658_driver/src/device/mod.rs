@@ -88,6 +88,13 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub async fn enable_accel_gyro(&mut self) -> Result<(), Error> {
+        // Raw accel/gyro polling reads 12 bytes from AX_L in one transaction.
+        // Only set ADDR_AI bit and preserve the rest of CTRL1, to avoid
+        // disturbing runtime mode bits.
+        let ctrl1 = self.read_reg(QMI8658_REG_CTRL1).await?;
+        self.write_reg_checked(QMI8658_REG_CTRL1, ctrl1 | CTRL1_ADDR_AI, CTRL1_ADDR_AI)
+            .await?;
+
         self.write_reg_checked(QMI8658_REG_CTRL2, CTRL2_DEFAULT_ACCEL_8G_1000HZ, 0xFF)
             .await?;
         self.write_reg_checked(QMI8658_REG_CTRL3, CTRL3_DEFAULT_GYRO_512DPS_1000HZ, 0xFF)

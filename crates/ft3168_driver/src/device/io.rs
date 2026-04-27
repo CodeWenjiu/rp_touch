@@ -6,7 +6,9 @@ use crate::types::Error;
 use super::Ft3168;
 
 impl<'d> Ft3168<'d> {
-    const I2C_OP_TIMEOUT_MS: u64 = 25;
+    // Keep touch transactions short so they cannot block IMU polling
+    // for tens of milliseconds in the shared sensor task.
+    const I2C_OP_TIMEOUT_MS: u64 = 3;
 
     pub async fn write_reg(&mut self, reg: u8, value: u8) -> Result<(), Error> {
         let bytes = [reg, value];
