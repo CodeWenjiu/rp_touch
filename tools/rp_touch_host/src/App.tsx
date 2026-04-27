@@ -1,6 +1,5 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import "./App.css";
@@ -23,9 +22,51 @@ type SerialConnectionPayload = {
   portName: string | null;
 };
 
+type TauriApi = {
+  invoke: typeof import("@tauri-apps/api/core").invoke;
+  listen: typeof import("@tauri-apps/api/event").listen;
+};
+
+type MaybeTauriWindow = Window & {
+  __TAURI_INTERNALS__?: unknown;
+};
+
+const TAURI_CONTEXT_ERROR =
+  "Tauri runtime 未注入（window.__TAURI_INTERNALS__ 不存在）。请使用 `just host` 启动。";
+
+async function loadTauriApi(): Promise<TauriApi | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const tauriWindow = window as MaybeTauriWindow;
+  if (!tauriWindow.__TAURI_INTERNALS__) {
+    return null;
+  }
+
+  const [core, event] = await Promise.all([
+    import("@tauri-apps/api/core"),
+    import("@tauri-apps/api/event"),
+  ]);
+  return {
+    invoke: core.invoke,
+    listen: event.listen,
+  };
+}
+
+async function requireTauriApi(): Promise<TauriApi> {
+  const api = await loadTauriApi();
+  if (!api) {
+    throw new Error(TAURI_CONTEXT_ERROR);
+  }
+  return api;
+}
+
 const toRadians = (value: number) => (value * Math.PI) / 180;
 const PITCH_BASELINE_DEG = -20;
 const X_AXIS = new THREE.Vector3(1, 0, 0);
+const MIN_MODEL_RADIUS = 0.01;
+const CAMERA_FIT_PADDING = 1.2;
 const BASELINE_QUAT = new THREE.Quaternion().setFromAxisAngle(
   X_AXIS,
   toRadians(-PITCH_BASELINE_DEG)
@@ -59,6 +100,20 @@ function toViewerQuaternion(sample: TelemetryAnglePayload): THREE.Quaternion {
   return BASELINE_QUAT.clone().multiply(modelQuat);
 }
 
+function computeFitDistance(
+  camera: THREE.PerspectiveCamera,
+  aspect: number,
+  radius: number
+): number {
+  const safeRadius = Math.max(radius * CAMERA_FIT_PADDING, MIN_MODEL_RADIUS);
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+
+  const fitByHeight = safeRadius / Math.tan(verticalFov / 2);
+  const fitByWidth = safeRadius / Math.tan(horizontalFov / 2);
+  return Math.max(fitByHeight, fitByWidth, safeRadius * 2);
+}
+
 function App() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const pivotRef = useRef<THREE.Group | null>(null);
@@ -90,6 +145,17 @@ function App() {
     const init = async () => {
       setIsLoading(true);
       setLoadError(null);
+
+      const tauriApi = await loadTauriApi();
+      if (!tauriApi) {
+        if (!isCancelled) {
+          setLoadError(TAURI_CONTEXT_ERROR);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const { invoke, listen } = tauriApi;
 
       try {
         const payload = await invoke<ModelPayload>("load_rp_touch_model");
@@ -138,20 +204,27 @@ function App() {
         }
       }
 
-      unlisten = await listen<TelemetryAnglePayload>(
-        "telemetry-angle",
-        (event) => {
-          if (isCancelled) {
-            return;
+      try {
+        unlisten = await listen<TelemetryAnglePayload>(
+          "telemetry-angle",
+          (event) => {
+            if (isCancelled) {
+              return;
+            }
+            setOrientation((prev) =>
+              sanitizeTelemetryPayload(
+                event.payload as Partial<TelemetryAnglePayload>,
+                prev
+              )
+            );
           }
-          setOrientation((prev) =>
-            sanitizeTelemetryPayload(
-              event.payload as Partial<TelemetryAnglePayload>,
-              prev
-            )
-          );
+        );
+      } catch (error) {
+        if (!isCancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setSerialError(message);
         }
-      );
+      }
     };
 
     void init();
@@ -190,6 +263,10 @@ function App() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
+    let modelRadius = MIN_MODEL_RADIUS;
 
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
@@ -208,18 +285,25 @@ function App() {
     pivot.quaternion.copy(toViewerQuaternion(orientation));
     scene.add(pivot);
     pivotRef.current = pivot;
+    const modelRoot = new THREE.Group();
+    pivot.add(modelRoot);
 
-    const resize = () => {
+    const fitCamera = () => {
       const width = Math.max(container.clientWidth, 1);
       const height = Math.max(container.clientHeight, 1);
       camera.aspect = width / height;
+      const distance = computeFitDistance(camera, camera.aspect, modelRadius);
+      camera.near = Math.max(distance / 100, 0.0001);
+      camera.far = Math.max(distance + modelRadius * 20, 10);
+      camera.position.set(0, 0, distance);
+      camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
     };
 
-    const observer = new ResizeObserver(resize);
+    const observer = new ResizeObserver(fitCamera);
     observer.observe(container);
-    resize();
+    fitCamera();
 
     const loader = new GLTFLoader();
     loader.parse(
@@ -231,20 +315,14 @@ function App() {
         }
 
         const root = gltf.scene;
-        const box = new THREE.Box3().setFromObject(root);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z, 0.01);
+        root.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(root, true);
+        const sphere = box.getBoundingSphere(new THREE.Sphere());
+        modelRadius = Math.max(sphere.radius, MIN_MODEL_RADIUS);
 
-        root.position.sub(center);
-        pivot.add(root);
-
-        const distance = maxDim * 2.6;
-        camera.near = Math.max(maxDim / 100, 0.0001);
-        camera.far = Math.max(maxDim * 100, 10);
-        camera.position.set(0, 0, distance);
-        camera.lookAt(0, 0, 0);
-        camera.updateProjectionMatrix();
+        modelRoot.position.copy(sphere.center).multiplyScalar(-1);
+        modelRoot.add(root);
+        fitCamera();
       },
       (error: unknown) => {
         if (disposed) {
@@ -278,6 +356,7 @@ function App() {
   const refreshPorts = async () => {
     setSerialError(null);
     try {
+      const { invoke } = await requireTauriApi();
       const serialPorts = await invoke<string[]>("list_serial_ports");
       setPorts(serialPorts);
       setSelectedPort((prev) =>
@@ -294,6 +373,7 @@ function App() {
     setSerialError(null);
 
     try {
+      const { invoke } = await requireTauriApi();
       const connectedPort = await invoke<string>("connect_serial", {
         port: selectedPort || null,
       });
@@ -313,6 +393,7 @@ function App() {
     setSerialError(null);
 
     try {
+      const { invoke } = await requireTauriApi();
       await invoke("disconnect_serial");
       setSerialConnected(false);
     } catch (error) {
@@ -326,6 +407,7 @@ function App() {
   const resetHeading = async () => {
     setSerialError(null);
     try {
+      const { invoke } = await requireTauriApi();
       await invoke("reset_heading");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

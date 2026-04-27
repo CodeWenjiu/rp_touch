@@ -16,8 +16,8 @@ pub(crate) const CMD_PAGE_SWITCH: u8 = 0xFE;
 pub(crate) const DMA_CHUNK_BYTES: usize = 16_384;
 pub(crate) const DEFAULT_ROWS_PER_BURST: usize = 64;
 
-pub const MAX_STABLE_SCLK_HZ: u32 = 60_000_000;
-pub(crate) const DEFAULT_SCLK_HZ: u32 = 60_000_000;
+pub const MAX_STABLE_SCLK_HZ: u32 = 70_000_000;
+pub(crate) const DEFAULT_SCLK_HZ: u32 = 70_000_000;
 pub(crate) const BOARD_INIT_SCLK_HZ: u32 = 32_000_000;
 
 pub(crate) const DEFAULT_CMD_PREFIX: u8 = 0x02;
