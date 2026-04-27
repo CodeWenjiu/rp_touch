@@ -48,7 +48,7 @@ impl<'d> Ft3168<'d> {
             }
             Timer::after(Duration::from_millis(2)).await;
         }
-        Ok(chip_id)
+        Err(Error::InvalidChipId(chip_id))
     }
 
     pub async fn firmware_id(&mut self) -> Result<u8, Error> {

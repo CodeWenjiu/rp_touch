@@ -4,6 +4,7 @@ use embassy_rp::i2c;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     InvalidAddress(u8),
+    InvalidChipId(u8),
     I2c(i2c::Error),
     SharedI2c(I2cDeviceError<i2c::Error>),
     Timeout,

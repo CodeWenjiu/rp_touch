@@ -36,8 +36,13 @@ pub async fn imu_capture_task(mut imu: Qmi8658<'static>, pipeline: &'static ImuP
                 .await
             {
                 Ok(n) => {
-                    for sample in fifo_batch[..n].iter().copied() {
-                        pipeline.push_sample(sample);
+                    if n > 0 {
+                        for sample in fifo_batch[..n].iter().copied() {
+                            pipeline.push_sample(sample);
+                        }
+                    } else {
+                        // No FIFO payload ready yet.
+                        Timer::after(Duration::from_millis(1)).await;
                     }
                 }
                 Err(ImuReport::ReadError) => {}

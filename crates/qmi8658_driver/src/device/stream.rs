@@ -5,14 +5,10 @@ use crate::{
     },
     types::{Error, ImuRawSample, ImuReport, Int1FifoStreamState},
 };
-use embassy_futures::select::{Either, select};
-use embassy_time::{Duration, Timer};
 
 use super::Qmi8658;
 
 impl<'d> Qmi8658<'d> {
-    const INT1_WAIT_TIMEOUT_MS: u64 = 100;
-
     pub async fn read_accel_gyro_raw(&mut self) -> Result<ImuRawSample, Error> {
         let mut buf = [0u8; 12];
         self.read_regs(QMI8658_REG_AX_L, &mut buf).await?;
@@ -58,20 +54,15 @@ impl<'d> Qmi8658<'d> {
         _state: &mut Int1FifoStreamState,
         fifo_batch: &mut [ImuRawSample],
     ) -> Result<usize, ImuReport> {
-        let mut pending_words = match self.fifo_word_count().await {
+        let pending_words = match self.fifo_word_count().await {
             Ok(v) => v,
             Err(_) => return Err(ImuReport::ReadError),
         };
 
         if pending_words == 0 {
-            let _ = self.wait_int1_any_edge_or_timeout().await;
-            pending_words = match self.fifo_word_count().await {
-                Ok(v) => v,
-                Err(_) => return Err(ImuReport::ReadError),
-            };
-            if pending_words == 0 {
-                return Err(ImuReport::ReadError);
-            }
+            // No FIFO payload ready yet. This is a normal runtime condition
+            // and should not be treated as a transport error.
+            return Ok(0);
         }
 
         match self.read_fifo_samples_into(fifo_batch).await {
@@ -99,17 +90,5 @@ impl<'d> Qmi8658<'d> {
         let sample_words_lsb = self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
         let fifo_status = self.read_reg(QMI8658_REG_FIFO_STATUS).await?;
         Ok((((fifo_status & 0b11) as u16) << 8) | sample_words_lsb as u16)
-    }
-
-    async fn wait_int1_any_edge_or_timeout(&mut self) -> bool {
-        match select(
-            self.wait_int1_any_edge(),
-            Timer::after(Duration::from_millis(Self::INT1_WAIT_TIMEOUT_MS)),
-        )
-        .await
-        {
-            Either::First(()) => true,
-            Either::Second(()) => false,
-        }
     }
 }

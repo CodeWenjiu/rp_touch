@@ -88,13 +88,15 @@ async fn main(spawner: Spawner) {
         qmi8658_driver::Qmi8658Config::default(),
     )
     .unwrap();
-    spawner.spawn(tasks::imu_capture::imu_capture_task(imu, imu_pipeline, i2c_bus).unwrap());
 
     let touch_pipeline = TOUCH_PIPELINE_CELL.init(ft3168_driver::TouchPipeline::new());
     let touch =
         ft3168_driver::Ft3168::new_shared(i2c_bus, ft3168_driver::Ft3168Config::default()).unwrap();
-    spawner
-        .spawn(tasks::touch_capture::touch_capture_task(touch, touch_pipeline, i2c_bus).unwrap());
+
+    spawner.spawn(
+        tasks::sensor_hub::sensor_hub_task(imu, imu_pipeline, touch, touch_pipeline, i2c_bus)
+            .unwrap(),
+    );
 
     // Core0: sensor capture fan-out + USB telemetry.
     spawner.spawn(tasks::sensor_watch::sensor_watch_task(imu_pipeline, touch_pipeline).unwrap());
