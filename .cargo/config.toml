@@ -3,11 +3,5 @@
 # runner = "elf2uf2-rs -s -d"
 runner = "picotool load -u -v -x -t elf"
 
-[alias]
-fw-run = "run -p app --bin rp_touch --target thumbv8m.main-none-eabihf --release"
-fw-check = "check -p app --bin rp_touch --target thumbv8m.main-none-eabihf"
-sim-check = "check -p rp_touch_sim --target x86_64-pc-windows-msvc"
-sim-run = "run -p rp_touch_sim --target x86_64-pc-windows-msvc"
-
 [env]
 DEFMT_LOG = "debug"
