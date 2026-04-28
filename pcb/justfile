@@ -1,4 +1,0 @@
-set shell := ["nu", "-c"]
-
-build:
-    ato build
