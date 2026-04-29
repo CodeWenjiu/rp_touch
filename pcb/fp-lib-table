@@ -1,0 +1,4 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "rp_touch") (type "KiCad") (uri "${KIPRJMOD}/rp_touch.pretty") (options "") (descr ""))
+)
