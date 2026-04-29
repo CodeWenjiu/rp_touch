@@ -28,7 +28,7 @@
 				)
 			)
 		)
-		(property "Footprint" "rp_touch"
+		(property "Footprint" "rp_touch:rp_touch"
 			(at -0.254 15.494 0)
 			(show_name no)
 			(do_not_autoplace no)

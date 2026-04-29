@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from build123d import Compound, export_gltf
+from build123d import Compound, export_gltf, export_step
 from ocp_vscode import show
 
 import pcb
@@ -18,9 +18,9 @@ MODEL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_BASE = MODEL_ROOT / "build" / "rp_touch"
 
 
-def build_model() -> Compound:
+def build_model(with_sockets: bool = False) -> Compound:
     housing, screen_subs = screen.build_screen()
-    pcb_asm = pcb.build_pcb()
+    pcb_asm = pcb.build_pcb(with_sockets=with_sockets)
 
     pcb_board = pcb_asm.children[0]
     pcb_board.joints["top"].connect_to(housing.joints["bottom"])
@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
         "--out",
         type=str,
         default=None,
-        help="Output base path for glTF export. Default: model/build/rp_touch",
+        help="Output base path for glTF + STEP export. Default: model/build/rp_touch",
     )
     parser.add_argument(
         "--show",
@@ -69,10 +69,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    model = build_model()
-
     output_base = resolve_output_base(args.out)
+
+    model = build_model()
     export_model(model, output_base)
+
+    kicad_model = build_model(with_sockets=True)
+    export_step(kicad_model, output_base.with_suffix(".step").as_posix())
 
     if args.show:
         show(model)

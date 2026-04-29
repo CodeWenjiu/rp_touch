@@ -6,6 +6,7 @@ HEADER_PIN_LENGTH = 11.0
 HEADER_BODY_THICK = 2.5
 HEADER_BODY_COLOR = Color("black")
 HEADER_PIN_COLOR = Color(0xd4af37)
+SOCKET_HEIGHT = 8.5
 
 
 def build_pin_header(rows: int, cols: int) -> Compound:
@@ -31,3 +32,13 @@ def build_pin_header(rows: int, cols: int) -> Compound:
             parts.append(pin.part)
 
     return Compound(children=parts, label=f"PinHeader_{rows}x{cols}")
+
+
+def build_pin_socket(rows: int, cols: int) -> Compound:
+    body_w = rows * HEADER_PITCH
+    body_l = cols * HEADER_PITCH
+    with BuildPart() as body:
+        Box(body_w, body_l, SOCKET_HEIGHT)
+    body.part.color = HEADER_BODY_COLOR
+    body.part.label = "Socket"
+    return Compound(children=[body.part], label=f"PinSocket_{rows}x{cols}")

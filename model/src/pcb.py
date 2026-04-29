@@ -18,7 +18,7 @@ PCB_COLOR = Color(0x0b2a5a)
 STANDOFF_COLOR = Color(0xcd7f32)
 
 
-def build_pcb() -> Compound:
+def build_pcb(with_sockets: bool = False) -> Compound:
     with BuildPart() as pcb:
         Box(PCB_WIDTH, PCB_LENGTH, PCB_THICKNESS)
         fillet(
@@ -54,4 +54,13 @@ def build_pcb() -> Compound:
         ph.move(Pos(x, ph_c_y, pcb_bottom_z - base_half))
         pin_header_compounds.append(ph)
 
-    return Compound(children=[pcb.part] + standoffs + pin_header_compounds, label="PCB Assembly")
+    parts = [pcb.part] + standoffs + pin_header_compounds
+
+    if with_sockets:
+        socket_z = pcb_bottom_z - pin_header.HEADER_BODY_THICK - pin_header.SOCKET_HEIGHT / 2
+        for x in [ph_dx, -ph_dx]:
+            socket = pin_header.build_pin_socket(1, 11)
+            socket.move(Pos(x, ph_c_y, socket_z))
+            parts.append(socket)
+
+    return Compound(children=parts, label="PCB Assembly")
