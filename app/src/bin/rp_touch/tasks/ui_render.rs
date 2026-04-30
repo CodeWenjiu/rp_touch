@@ -1,11 +1,11 @@
-use embassy_time::{Duration, Instant};
+use embassy_time::{Duration, Instant, Timer};
 
 use crate::shared::{CHIP_TEMP_WATCH, IMU_TEMP_WATCH, IMU_WATCH, TOUCH_WATCH, UI_STATE_WATCH, UiRenderState};
 use crate::slint_ui;
 use crate::SYSTEM_CLOCK_MHZ;
 
 const TILT_REDRAW_EPS: f32 = 0.002;
-const IMU_REDRAW_FORCE_MS: u64 = 120;
+const IMU_REDRAW_FORCE_MS: u64 = 300;
 const REDRAW_KEEPALIVE_MS: u64 = 250;
 
 fn touch_sample_to_xy(sample: ft3168_driver::TouchSample) -> Option<(u16, u16)> {
@@ -177,5 +177,8 @@ pub async fn ui_render_task() {
             rendered_frame_count = 0;
             fps_window_start = now;
         }
+
+        // Yield to the executor so sensor_watch gets CPU time on Core1.
+        Timer::after(Duration::from_millis(1)).await;
     }
 }

@@ -1,6 +1,7 @@
 use core::ops::Range;
 
 use co5300_driver::{Co5300, DISPLAY_HEIGHT};
+use embassy_time::{block_for, Duration};
 use slint::platform::software_renderer::LineBufferProvider;
 
 use crate::constants::{STRIPE_BUFFER_COUNT, STRIPE_H, STRIPE_PIXELS, STRIPE_WIDTH};
@@ -153,6 +154,8 @@ impl<'a> StripePipeline<'a> {
     }
 
     fn poll_transfer_progress(&mut self) {
+        // Poll the display driver: if the current DMA transfer finished,
+        // free the inflight slot so a pending job can start.
         if self.inflight_job.is_some() && self.display.poll_fullwidth_stripe_transfer_done() {
             self.inflight_job = None;
         }
@@ -175,7 +178,8 @@ impl<'a> StripePipeline<'a> {
             }
 
             self.poll_transfer_progress();
-            core::hint::spin_loop();
+            // Yield for ~1 µs instead of tight spin-loop.
+            block_for(Duration::from_micros(1));
         }
     }
 
@@ -259,7 +263,7 @@ impl<'a> StripePipeline<'a> {
                 return;
             }
 
-            core::hint::spin_loop();
+            block_for(Duration::from_micros(1));
         }
     }
 
@@ -310,13 +314,15 @@ impl<'a> StripePipeline<'a> {
         }
     }
 
-    fn finalize(&mut self) {
+    /// Submit the current stripe and drain pending jobs.
+    /// Called on Drop; uses `block_for` instead of tight spin-loop.
+    fn commit(&mut self) {
         self.submit_current_stripe();
 
         while self.inflight_job.is_some() || self.pending_job.is_some() {
             self.poll_transfer_progress();
             if self.inflight_job.is_some() || self.pending_job.is_some() {
-                core::hint::spin_loop();
+                block_for(Duration::from_micros(2));
             }
         }
     }
@@ -324,7 +330,7 @@ impl<'a> StripePipeline<'a> {
 
 impl Drop for StripePipeline<'_> {
     fn drop(&mut self) {
-        self.finalize();
+        self.commit();
     }
 }
 

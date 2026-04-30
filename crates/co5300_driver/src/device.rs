@@ -7,7 +7,7 @@ use embassy_rp::{
     pio::{self, Direction, FifoJoin, Pio, ShiftDirection, StateMachine},
     pio_programs::clock_divider::calculate_pio_clock_divider,
 };
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Timer, block_for};
 
 use crate::{
     config::*,
@@ -263,6 +263,9 @@ pub struct Co5300<'d> {
     reset: Output<'d>,
     tuning: Co5300Tuning,
     stripe_transfer_active: bool,
+    /// Number of stripe transfers submitted but not yet completed.
+    /// Used by the async drain loop for inter-frame pipelining.
+    pending_stripes: u8,
 }
 
 impl<'d> Co5300<'d> {
@@ -291,6 +294,7 @@ impl<'d> Co5300<'d> {
             reset,
             tuning,
             stripe_transfer_active: false,
+            pending_stripes: 0,
         }
     }
 
@@ -504,8 +508,8 @@ impl<'d> Co5300<'d> {
         };
         self.push_quad_dma_start(payload);
         self.stripe_transfer_active = true;
+        self.pending_stripes = self.pending_stripes.saturating_add(1);
     }
-
     pub fn poll_fullwidth_stripe_transfer_done(&mut self) -> bool {
         if !self.stripe_transfer_active {
             return true;
@@ -517,7 +521,32 @@ impl<'d> Co5300<'d> {
 
         self.cs.set_high();
         self.stripe_transfer_active = false;
+        self.pending_stripes = self.pending_stripes.saturating_sub(1);
         true
+    }
+
+    /// Returns `true` when all submitted stripe transfers have completed.
+    #[inline]
+    pub fn has_pending_stripes(&self) -> bool {
+        self.pending_stripes > 0
+    }
+
+    /// Non-blocking poll: check if the current stripe transfer completed.
+    /// Call this repeatedly from the render loop to advance DMA progress.
+    #[inline]
+    pub fn service_stripe_transfer(&mut self) {
+        let _ = self.poll_fullwidth_stripe_transfer_done();
+    }
+
+    /// Wait for all submitted stripe transfers to complete.
+    /// Uses `block_for` yields instead of tight spin-loop.
+    pub fn drain_pending_stripes(&mut self) {
+        while self.pending_stripes > 0 {
+            self.service_stripe_transfer();
+            if self.pending_stripes > 0 {
+                block_for(Duration::from_micros(2));
+            }
+        }
     }
 
     pub fn wait_fullwidth_stripe_transfer_done(&mut self) {

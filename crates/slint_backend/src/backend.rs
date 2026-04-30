@@ -43,7 +43,15 @@ impl SlintBackend {
         dispatched
     }
 
+    /// Render the current Slint frame if needed.
+    ///
+    /// At the top, drains any pending stripe transfers from the previous
+    /// frame so that rendering and transfer pipeline across frames.
+    /// Returns `true` if pixels were actually rendered.
     pub fn render_if_needed(&mut self, display: &mut Co5300<'static>) -> bool {
+        // Drain previous frame's DMA transfers before rendering new frame.
+        display.drain_pending_stripes();
+
         slint::platform::update_timers_and_animations();
 
         let mut rendered = false;
@@ -53,6 +61,7 @@ impl SlintBackend {
             let bb = dirty.bounding_box_size();
             rendered = bb.width > 0 && bb.height > 0;
         });
+        // pipeline dropped → commit() submits remaining stripes (non-blocking)
 
         rendered
     }
