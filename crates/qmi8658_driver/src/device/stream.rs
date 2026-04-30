@@ -1,14 +1,17 @@
+use i2c_bus::DeviceIo;
+
 use crate::{
     regs::{
-        CTRL9_CMD_REQ_FIFO, FIFO_CTRL_RD_MODE, QMI8658_REG_AX_L, QMI8658_REG_FIFO_CTRL,
-        QMI8658_REG_FIFO_SMPL_CNT, QMI8658_REG_FIFO_STATUS,
+        CTRL9_CMD_REQ_FIFO, FIFO_CTRL_RD_MODE, QMI8658_REG_AX_L,
+        QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_SMPL_CNT,
+        QMI8658_REG_FIFO_STATUS,
     },
     types::{Error, ImuRawSample, ImuReport, Int1FifoStreamState},
 };
 
 use super::Qmi8658;
 
-impl<'d> Qmi8658<'d> {
+impl<'d, IO: DeviceIo> Qmi8658<'d, IO> {
     pub async fn read_accel_gyro_raw(&mut self) -> Result<ImuRawSample, Error> {
         let mut buf = [0u8; 12];
         self.read_regs(QMI8658_REG_AX_L, &mut buf).await?;
@@ -38,7 +41,8 @@ impl<'d> Qmi8658<'d> {
 
         if trailing_bytes > 0 {
             let mut discard = [0u8; 12];
-            self.read_fifo_bytes(&mut discard[..trailing_bytes]).await?;
+            self.read_fifo_bytes(&mut discard[..trailing_bytes])
+                .await?;
         }
 
         self.write_reg(
@@ -60,8 +64,6 @@ impl<'d> Qmi8658<'d> {
         };
 
         if pending_words == 0 {
-            // No FIFO payload ready yet. This is a normal runtime condition
-            // and should not be treated as a transport error.
             return Ok(0);
         }
 
@@ -87,7 +89,8 @@ impl<'d> Qmi8658<'d> {
     }
 
     async fn fifo_word_count(&mut self) -> Result<u16, Error> {
-        let sample_words_lsb = self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
+        let sample_words_lsb =
+            self.read_reg(QMI8658_REG_FIFO_SMPL_CNT).await?;
         let fifo_status = self.read_reg(QMI8658_REG_FIFO_STATUS).await?;
         Ok((((fifo_status & 0b11) as u16) << 8) | sample_words_lsb as u16)
     }

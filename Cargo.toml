@@ -9,6 +9,7 @@ members = [
     "crates/ft3168_driver",
     "crates/slint_backend",
     "crates/rp_telemetry",
+    "crates/i2c_bus",
 
     "tools/rp_touch_sim",
     "tools/rp_touch_host/src-tauri"

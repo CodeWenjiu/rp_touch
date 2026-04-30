@@ -5,11 +5,9 @@ edition = "2024"
 
 [dependencies]
 embassy-executor = { workspace = true }
-embassy-embedded-hal = { workspace = true }
 embassy-futures = { workspace = true }
 embassy-rp = { workspace = true }
-embassy-sync = { workspace = true }
 embassy-time = { workspace = true }
-embedded-hal-async = { workspace = true }
 heapless = { workspace = true }
+i2c_bus = { path = "../i2c_bus" }
 micromath = { workspace = true }

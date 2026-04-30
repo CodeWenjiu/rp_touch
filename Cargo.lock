@@ -156,6 +156,7 @@ dependencies = [
  "embassy-time",
  "ft3168_driver",
  "heapless 0.9.2",
+ "i2c_bus",
  "panic-probe",
  "qmi8658_driver",
  "rp_telemetry",
@@ -2319,13 +2320,10 @@ dependencies = [
 name = "ft3168_driver"
 version = "0.1.0"
 dependencies = [
- "embassy-embedded-hal",
  "embassy-executor",
- "embassy-rp",
- "embassy-sync",
  "embassy-time",
- "embedded-hal-async",
  "heapless 0.9.2",
+ "i2c_bus",
 ]
 
 [[package]]
@@ -3368,6 +3366,18 @@ dependencies = [
  "skrifa",
  "swash",
  "zeno",
+]
+
+[[package]]
+name = "i2c_bus"
+version = "0.1.0"
+dependencies = [
+ "embassy-embedded-hal",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embedded-hal-async",
+ "static_cell",
 ]
 
 [[package]]
@@ -5761,14 +5771,12 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 name = "qmi8658_driver"
 version = "0.1.0"
 dependencies = [
- "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-rp",
- "embassy-sync",
  "embassy-time",
- "embedded-hal-async",
  "heapless 0.9.2",
+ "i2c_bus",
  "micromath",
 ]
 

@@ -1,28 +1,24 @@
-use embassy_embedded_hal::shared_bus::I2cDeviceError;
-use embassy_rp::{gpio::Pull, i2c};
+use embassy_rp::gpio::Pull;
+use i2c_bus::BusError;
 
 use crate::regs::QMI8658_I2C_ADDR;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
-    I2c(i2c::Error),
-    SharedI2c(I2cDeviceError<i2c::Error>),
-    Timeout,
+    Bus(BusError),
     InvalidAddress(u8),
     InvalidChipId(u8),
-    RegisterVerify { reg: u8, expected: u8, actual: u8 },
+    RegisterVerify {
+        reg: u8,
+        expected: u8,
+        actual: u8,
+    },
     Ctrl9Timeout,
 }
 
-impl From<i2c::Error> for Error {
-    fn from(value: i2c::Error) -> Self {
-        Self::I2c(value)
-    }
-}
-
-impl From<I2cDeviceError<i2c::Error>> for Error {
-    fn from(value: I2cDeviceError<i2c::Error>) -> Self {
-        Self::SharedI2c(value)
+impl From<BusError> for Error {
+    fn from(value: BusError) -> Self {
+        Self::Bus(value)
     }
 }
 

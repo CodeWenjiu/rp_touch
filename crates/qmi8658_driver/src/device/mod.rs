@@ -1,22 +1,21 @@
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_rp::{
     Peri,
     gpio::Input,
-    i2c::{Async, I2c},
     peripherals,
 };
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
+use i2c_bus::DeviceIo;
 
 use crate::{
     regs::{
         CTRL1_ADDR_AI, CTRL1_BASE, CTRL1_FIFO_INT_SEL, CTRL1_INT1_EN,
-        CTRL2_DEFAULT_ACCEL_8G_1000HZ, CTRL3_DEFAULT_GYRO_512DPS_1000HZ, CTRL7_ACCEL_ENABLE,
-        CTRL7_GYRO_ENABLE, CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT, CTRL9_CMD_ACK, CTRL9_CMD_RST_FIFO,
-        QMI8658_CHIP_ID, QMI8658_REG_CTRL1, QMI8658_REG_CTRL2, QMI8658_REG_CTRL3,
-        QMI8658_REG_CTRL7, QMI8658_REG_CTRL8, QMI8658_REG_CTRL9, QMI8658_REG_FIFO_CTRL,
-        QMI8658_REG_FIFO_WTM_TH, QMI8658_REG_TEMP_L, QMI8658_REG_RESET, QMI8658_REG_STATUSINT, QMI8658_REG_WHO_AM_I,
-        RESET_SOFT_CMD,
+        CTRL2_DEFAULT_ACCEL_8G_1000HZ, CTRL3_DEFAULT_GYRO_512DPS_1000HZ,
+        CTRL7_ACCEL_ENABLE, CTRL7_GYRO_ENABLE, CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT,
+        CTRL9_CMD_ACK, CTRL9_CMD_RST_FIFO, QMI8658_CHIP_ID, QMI8658_REG_CTRL1,
+        QMI8658_REG_CTRL2, QMI8658_REG_CTRL3, QMI8658_REG_CTRL7, QMI8658_REG_CTRL8,
+        QMI8658_REG_CTRL9, QMI8658_REG_FIFO_CTRL, QMI8658_REG_FIFO_WTM_TH,
+        QMI8658_REG_TEMP_L, QMI8658_REG_RESET, QMI8658_REG_STATUSINT,
+        QMI8658_REG_WHO_AM_I, RESET_SOFT_CMD,
     },
     types::{Error, FifoConfig, ImuReport, Qmi8658Config},
 };
@@ -24,18 +23,15 @@ use crate::{
 mod io;
 mod stream;
 
-pub struct Qmi8658<'d> {
-    i2c: SharedI2cDevice<'d>,
+/// QMI8658 6-axis IMU driver.
+pub struct Qmi8658<'d, IO: DeviceIo> {
+    i2c: IO,
     int1: Input<'d>,
     address: u8,
     fifo_ctrl_cfg: u8,
 }
 
-type SharedBusInner<'d> = I2c<'d, peripherals::I2C1, Async>;
-pub type SharedI2cBus<'d> = Mutex<CriticalSectionRawMutex, SharedBusInner<'d>>;
-type SharedI2cDevice<'d> = I2cDevice<'d, CriticalSectionRawMutex, SharedBusInner<'d>>;
-
-impl<'d> Qmi8658<'d> {
+impl<'d, IO: DeviceIo> Qmi8658<'d, IO> {
     const INIT_BOOT_WAIT_MS: u64 = 15;
     const SOFT_RESET_WAIT_MS: u64 = 30;
     const RESET_SETTLE_WAIT_MS: u64 = 2;
@@ -44,8 +40,8 @@ impl<'d> Qmi8658<'d> {
     const INIT_ATTEMPTS: usize = 4;
     const INIT_RETRY_WAIT_MS: u64 = 10;
 
-    pub fn new_shared(
-        i2c_bus: &'d SharedI2cBus<'d>,
+    pub fn new(
+        i2c: IO,
         int1: Peri<'d, peripherals::PIN_8>,
         config: Qmi8658Config,
     ) -> Result<Self, Error> {
@@ -56,7 +52,7 @@ impl<'d> Qmi8658<'d> {
         let int1 = Input::new(int1, config.int1_pull);
 
         Ok(Self {
-            i2c: I2cDevice::new(i2c_bus),
+            i2c,
             int1,
             address: config.address,
             fifo_ctrl_cfg: 0,
@@ -64,7 +60,6 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub async fn init(&mut self) -> Result<u8, Error> {
-        // Give the IMU enough boot time before the first I2C access.
         Timer::after(Duration::from_millis(Self::INIT_BOOT_WAIT_MS)).await;
 
         let mut last_error = None;
@@ -88,17 +83,22 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub async fn enable_accel_gyro(&mut self) -> Result<(), Error> {
-        // Raw accel/gyro polling reads 12 bytes from AX_L in one transaction.
-        // Only set ADDR_AI bit and preserve the rest of CTRL1, to avoid
-        // disturbing runtime mode bits.
         let ctrl1 = self.read_reg(QMI8658_REG_CTRL1).await?;
         self.write_reg_checked(QMI8658_REG_CTRL1, ctrl1 | CTRL1_ADDR_AI, CTRL1_ADDR_AI)
             .await?;
 
-        self.write_reg_checked(QMI8658_REG_CTRL2, CTRL2_DEFAULT_ACCEL_8G_1000HZ, 0xFF)
-            .await?;
-        self.write_reg_checked(QMI8658_REG_CTRL3, CTRL3_DEFAULT_GYRO_512DPS_1000HZ, 0xFF)
-            .await?;
+        self.write_reg_checked(
+            QMI8658_REG_CTRL2,
+            CTRL2_DEFAULT_ACCEL_8G_1000HZ,
+            0xFF,
+        )
+        .await?;
+        self.write_reg_checked(
+            QMI8658_REG_CTRL3,
+            CTRL3_DEFAULT_GYRO_512DPS_1000HZ,
+            0xFF,
+        )
+        .await?;
 
         self.write_reg_checked(
             QMI8658_REG_CTRL7,
@@ -121,11 +121,16 @@ impl<'d> Qmi8658<'d> {
             CTRL8_CTRL9_HANDSHAKE_USE_STATUSINT,
         )
         .await?;
-        self.write_reg_checked(QMI8658_REG_FIFO_WTM_TH, config.watermark_odr_samples, 0xFF)
-            .await?;
+        self.write_reg_checked(
+            QMI8658_REG_FIFO_WTM_TH,
+            config.watermark_odr_samples,
+            0xFF,
+        )
+        .await?;
 
-        self.fifo_ctrl_cfg = ((config.size.bits() << crate::regs::FIFO_CTRL_SIZE_SHIFT) & 0b1100)
-            | (config.mode.bits() & crate::regs::FIFO_CTRL_MODE_MASK);
+        self.fifo_ctrl_cfg =
+            ((config.size.bits() << crate::regs::FIFO_CTRL_SIZE_SHIFT) & 0b1100)
+                | (config.mode.bits() & crate::regs::FIFO_CTRL_MODE_MASK);
         self.write_reg_checked(QMI8658_REG_FIFO_CTRL, self.fifo_ctrl_cfg, 0x0F)
             .await?;
 
@@ -133,7 +138,10 @@ impl<'d> Qmi8658<'d> {
         self.enable_accel_gyro().await
     }
 
-    pub async fn setup_int1_fifo_stream(&mut self, config: FifoConfig) -> Result<(), ImuReport> {
+    pub async fn setup_int1_fifo_stream(
+        &mut self,
+        config: FifoConfig,
+    ) -> Result<(), ImuReport> {
         self.init().await.map_err(|e| match e {
             Error::InvalidChipId(chip_id) => ImuReport::InvalidChipId(chip_id),
             _ => ImuReport::InitError,
@@ -151,10 +159,10 @@ impl<'d> Qmi8658<'d> {
     }
 
     pub async fn soft_reset(&mut self) -> Result<(), Error> {
-        self.write_reg(QMI8658_REG_RESET, RESET_SOFT_CMD).await?;
+        self.write_reg(QMI8658_REG_RESET, RESET_SOFT_CMD)
+            .await?;
         Timer::after(Duration::from_millis(Self::SOFT_RESET_WAIT_MS)).await;
 
-        // Best-effort cleanup for command/status latches after reset.
         let _ = self.write_reg(QMI8658_REG_CTRL9, CTRL9_CMD_ACK).await;
         let _ = self.read_reg(QMI8658_REG_STATUSINT).await;
         Timer::after(Duration::from_millis(Self::RESET_SETTLE_WAIT_MS)).await;
@@ -173,6 +181,8 @@ impl<'d> Qmi8658<'d> {
     pub fn int1_is_high(&self) -> bool {
         self.int1.is_high()
     }
+
+    // ── private helpers ──────────────────────────────────────────────────
 
     async fn init_once(&mut self) -> Result<u8, Error> {
         self.soft_reset().await?;
@@ -203,7 +213,12 @@ impl<'d> Qmi8658<'d> {
         let _ = self.read_reg(QMI8658_REG_STATUSINT).await;
     }
 
-    async fn write_reg_checked(&mut self, reg: u8, value: u8, mask: u8) -> Result<(), Error> {
+    async fn write_reg_checked(
+        &mut self,
+        reg: u8,
+        value: u8,
+        mask: u8,
+    ) -> Result<(), Error> {
         self.write_reg(reg, value).await?;
         let actual = self.read_reg(reg).await?;
         if (actual & mask) != (value & mask) {
@@ -214,5 +229,32 @@ impl<'d> Qmi8658<'d> {
             });
         }
         Ok(())
+    }
+
+    // ── I2C primitives (thin wrappers around DeviceIo) ───────────────────
+
+    pub(super) async fn write_reg(&mut self, reg: u8, value: u8) -> Result<(), Error> {
+        self.i2c
+            .write_reg(self.address, reg, value)
+            .await
+            .map_err(Error::Bus)
+    }
+
+    pub(super) async fn read_reg(&mut self, reg: u8) -> Result<u8, Error> {
+        self.i2c
+            .read_reg(self.address, reg)
+            .await
+            .map_err(Error::Bus)
+    }
+
+    pub(super) async fn read_regs(
+        &mut self,
+        start_reg: u8,
+        out: &mut [u8],
+    ) -> Result<(), Error> {
+        self.i2c
+            .read_regs(self.address, start_reg, out)
+            .await
+            .map_err(Error::Bus)
     }
 }
