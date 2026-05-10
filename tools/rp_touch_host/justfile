@@ -1,7 +1,7 @@
 set shell := ["nu", "-c"]
 
 init:
-    bun init
+    bun install
 
 run:
     bun run tauri dev
